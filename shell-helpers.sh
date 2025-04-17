@@ -9,8 +9,14 @@ fi
 
 # Constants
 _myDir="${BASH_SOURCE[0]%/*}"
-_myVersion="2024.02.28-1"
+_myVersion="2025.04.17-1"
 readonly _myDir _myVersion
+
+# Logging facility
+if ! source "${_myDir}/logging/loglines.sh"; then
+	echo "ERROR:  Unable to source ${_myDir}/logging/loglines.sh" >&2
+	exit 2
+fi
 
 # Docker compose helpers
 if ! source "${_myDir}/docker/compose-helpers.sh"; then

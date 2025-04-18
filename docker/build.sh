@@ -1,0 +1,624 @@
+#!/bin/bash
+################################################################################
+# Build the Docker image(s) for this project.
+#
+# External control variables:
+# TMPDIR <string> The directory in which to create temporary files like baked
+#                 Docker Compose files.  The default is the system's temporary
+#                 directory.
+#
+# Optional external assets:
+# - build-pre.sh <DEPLOYMENT_STAGE> <BAKED_DOCKER_COMPOSE_FILE>
+#   A script to run just before building the Docker image(s).  Such a script is
+#   run in the same context as this script, so it can manipulate the baked
+#   Docker Compose file before it is used but will have only a local copy
+#   of the environment.  The script file must be in the project directory -- two
+#   directory levels higher than the directory containing this parent script --
+#   and be executable by the user running this script.  It will receive
+#   the deployment stage name and the name of the baked Docker Compose file as
+#   command-line arguments, in that order.  Using this script is optional and
+#   is most useful for preparing the build directory structure.  DO NOT USE THIS
+#   SCRIPT TO PERFORM ANY DOCKER OPERATIONS -- the images and containers will
+#   not yet exist -- AND DO NOT ATTEMPT TO SET ANY ENVIRONMENT VARIABLES YOU
+#   INTEND FOR THIS SCRIPT TO USE (because all such environment variable changes
+#   will discarded once your script ends).
+# - build-post.sh <DEPLOYMENT_STAGE> <BAKED_DOCKER_COMPOSE_FILE>
+#   A script to run after building the Docker image(s).  Such a script is run in
+#   the same context as this script, so it will have a a local copy of the
+#   environment, though any changes to the baked Docker Compose file will be
+#   moot.  The script file must be in the project directory -- two directory
+#   levels higher than the directory containing this parent script -- and be
+#   executable by the user running this script.
+# - build-post-<service>.sh
+#   This is a script to run within the named service container after building
+#   its Docker image.  It will receive no command-line arguments.  Running this
+#   script will have NO EFFECT on the built image but rather only upon a local
+#   instance of its container.  Further, this script will NOT have access to the
+#   context of this parent script.  The container will be started to facilitate
+#   script execution.  Set or omit --start to indicate whether you wish for the
+#   container to remain running upon completion.  The script file must be in the
+#   project directory -- two directory levels higher than the directory
+#   containing this parent script -- but it does not need to be executable.
+#
+# Copyright 2025 William W. Kimball, Jr. MBA MSIS
+# All rights reserved.
+################################################################################
+# Constants
+MY_VERSION='2025.04.16-1'
+MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../" && pwd)"
+LIB_DIRECTORY="${MY_DIRECTORY}/../"
+DOCKER_DIRECTORY="${PROJECT_DIRECTORY}/docker"
+IMAGES_DIRECTORY="${DOCKER_DIRECTORY}/images"
+COMPOSE_BASE_FILE="${DOCKER_DIRECTORY}/docker-compose.yaml"
+DEPLOY_STAGE_DEVELOPMENT=development
+DEPLOY_STAGE_LAB=lab
+DEPLOY_STAGE_QA=qa
+DEPLOY_STAGE_STAGING=staging
+DEPLOY_STAGE_PRODUCTION=production
+readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
+	DOCKER_DIRECTORY IMAGES_DIRECTORY COMPOSE_BASE_FILE \
+	DEPLOY_STAGE_DEVELOPMENT DEPLOY_STAGE_LAB DEPLOY_STAGE_QA \
+	DEPLOY_STAGE_STAGING DEPLOY_STAGE_PRODUCTION
+
+# Import the shell helpers
+if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
+	echo "ERROR:  Failed to import shell helpers!" >&2
+	exit 2
+fi
+
+# Process command-line arguments, if there are any
+_bakedDir="${TMPDIR:-$(dirname $(mktemp -u))}"
+_cleanResources=false
+_deployStage=$DEPLOY_STAGE_DEVELOPMENT
+_hasErrors=false
+_imageVersionFile="${PROJECT_DIRECTORY}/VERSION"
+_makePortable=true
+_pushImages=true
+_saveBakedFile=false
+_servicesRunning=false
+_startEnvironment=false
+while [ $# -gt 0 ]; do
+	case $1 in
+		-b|--baked)
+			if [ -z "$2" ]; then
+				errorline "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_bakedDir="$2"
+				_saveBakedFile=true
+				shift
+			fi
+			;;
+
+		-c|--clean)
+			_cleanResources=true
+			;;
+
+		-d|--stage)
+			if [ -z "$2" ]; then
+				errorline "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				if [[ "$2" =~ ^[Dd] ]]; then
+					_deployStage=$DEPLOY_STAGE_DEVELOPMENT
+					_pushImages=false
+				elif [[ "$2" =~ ^[Ll] ]]; then
+					_deployStage=$DEPLOY_STAGE_LAB
+				elif [[ "$2" =~ ^[Qq] ]]; then
+					_deployStage=$DEPLOY_STAGE_QA
+				elif [[ "$2" =~ ^[Ss] ]]; then
+					_deployStage=$DEPLOY_STAGE_STAGING
+				elif [[ "$2" =~ ^[Pp] ]]; then
+					_deployStage=$DEPLOY_STAGE_PRODUCTION
+				else
+					errorline "Unsupported value, ${2}, for $1 option."
+					_hasErrors=true
+				fi
+				shift
+			fi
+			;;
+
+		-h|--help)
+			cat <<EOHELP
+$0 [OPTIONS] [--] [BUILD_SERVICE...]
+
+Builds the Docker image(s) for this project.  OPTIONS include:
+  -b BAKED_DIR, --baked BAKED_DIR
+       The directory in which to permanently save the baked Docker Compose file,
+       taking the name of any selected override file.  Left unset, the system
+       default temporary directory is used and the baked file is automatically
+       destroyed when the script exits.
+  -c, --clean
+       Clean the Docker resources before building.  The default is to NOT
+       clean the resources.
+  -d DEPLOY_STAGE, --stage DEPLOY_STAGE
+       Indicate which run mode to use.  Must be one of:
+         * ${DEPLOY_STAGE_DEVELOPMENT}
+         * ${DEPLOY_STAGE_LAB}
+         * ${DEPLOY_STAGE_STAGING}
+         * ${DEPLOY_STAGE_PRODUCTION}
+       The default is ${_deployStage}.  This controls which Docker Compose
+       override file is used based on the presence of the DEPLOY_STAGE string
+       within the file name matching the pattern:  docker-compose.*.yaml.  For
+       the ${DEPLOY_STAGE_DEVELOPMENT} mode, this setting also implies that the
+       --no-image and --no-push options are set.
+  -h, --help
+       Display this help message and exit.
+  -I, --no-image
+       Do NOT save portable copies of the new image(s).  The default is to
+       save portable copies of the new image(s).  Implied when DEPLOY_STAGE is
+       ${DEPLOY_STAGE_DEVELOPMENT}.
+  -i IMAGE_DIR, --images IMAGE_DIR
+       The directory to save portable copies of the new image to.  Defaults to
+       ${IMAGES_DIRECTORY}.
+  -P, --no-push
+       Do NOT push the new image(s) to the Docker registry.  The default is
+       to push the new image(s) to the registry.  Implied when DEPLOY_STAGE is
+       ${DEPLOY_STAGE_DEVELOPMENT}.
+  -r VERSION_FILE, --version-file VERSION_FILE
+       The file containing the base version number.  A version file is required
+       in order to properly version and build-tag Docker images via this script.
+       The default is:
+       ${_imageVersionFile}.
+  -s, --start
+       Start the Docker environment after building.  The default is to NOT
+       start the environment.  Note that some operations will start the
+       environment automatically in order to perform their tasks.  In that
+       case, setting this option will simply keep the environment running
+       after the operation completes.  Implies --no-image and --no-push.
+  -v, --version
+       Display the version of this script and exit.
+
+BUILD_SERVICE   One or more space-delimited names of services to build.
+                Defaults to all services defined in the Docker Compose file
+                which have 'build' attributes.
+
+EOHELP
+			exit 0
+			;;
+
+		-I|--no-image)
+			_makePortable=false
+			;;
+
+		-i|--images)
+			if [ -z "$2" ]; then
+				errorline "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				IMAGES_DIRECTORY="$2"
+				shift
+			fi
+			;;
+
+		-P|--no-push)
+			_pushImages=false
+			;;
+
+		-r|--version-file)
+			if [ -z "$2" ]; then
+				errorline "Missing value for $1 option!" >&2
+				_hasErrors=true
+			else
+				_imageVersionFile="$2"
+				shift
+			fi
+			;;
+
+		-s|--start)
+			_startEnvironment=true
+			makePortable=false
+			pushImages=false
+			;;
+
+		-v|--version)
+			echo "$0 ${MY_VERSION}"
+			exit 0
+			;;
+
+		--)	# Explicit end of options
+			shift
+			break
+			;;
+
+		-*)
+			errorline "Unknown option:  $1"
+			_hasErrors=true
+			;;
+
+		*)	# Implicit end of options
+			break
+			;;
+	esac
+
+	shift
+done
+
+# Any remaining arguments are assumed to be the names of services to build
+if [ 0 -lt $# ]; then
+	buildServices=("$@")
+	infoline "Building only the following service(s):  ${buildServices[*]}"
+fi
+
+# Verify Docker is running
+if ! docker info >/dev/null 2>&1; then
+	errorline "Docker is not running!" >&2
+	_hasErrors=true
+fi
+
+# Verify Docker Compose is installed
+if ! docker compose --version >/dev/null 2>&1; then
+	errorline "Docker Compose is not installed!" >&2
+	_hasErrors=true
+fi
+
+# yamlpath (and Python 3) is required to parse various files
+if ! yaml-get --version >/dev/null 2>&1; then
+	errorline "yamlpath (https://github.com/wwkimball/yamlpath?tab=readme-ov-file#installing) is not installed!" >&2
+	_hasErrors=true
+fi
+
+# Get the base version number of the application
+if [ ! -f "$_imageVersionFile" ]; then
+	errorline "Missing ${_imageVersionFile} file!" >&2
+	_hasErrors=true
+else
+	baseVersion=$(head -1 "$_imageVersionFile")
+	if [ -z "$baseVersion" ]; then
+		errorline "Version number not present in the first line of, ${_imageVersionFile}!" >&2
+		_hasErrors=true
+	fi
+fi
+
+# Identify the Docker Compose override files to use
+overrideComposeFile="${DOCKER_DIRECTORY}/docker-compose.${_deployStage}.yaml"
+if [ ! -f "$overrideComposeFile" ]; then
+	overrideComposeFile=
+fi
+
+# Work from a pre-baked, possibly temporary Docker Compose file
+bakedComposeFile=
+if $_saveBakedFile; then
+	bakedComposeFile="${_bakedDir}/docker-compose.${_deployStage}.baked.yaml"
+	if [ ! -d "$_bakedDir" ]; then
+		if ! mkdir -p "$_bakedDir"; then
+			errorline "Unable to create ${_bakedDir}!" >&2
+			exit 2
+		fi
+	fi
+	if [ -e "$bakedComposeFile" ]; then
+		if ! rm -f "$bakedComposeFile"; then
+			errorline "Unable to remove ${bakedComposeFile}!" >&2
+			exit 4
+		fi
+	fi
+else
+	bakedComposeFile=$(mktemp)
+	trap "rm -f '$bakedComposeFile'" EXIT
+fi
+dynamicBakeComposeFile "$bakedComposeFile" "$_deployStage" "$DOCKER_DIRECTORY"
+if [ 0 -ne $? ]; then
+	noBakeErrorMessage="Unable to bake ${COMPOSE_BASE_FILE}"
+	if [ -n "$overrideComposeFile" ]; then
+		noBakeErrorMessage+=" with ${overrideComposeFile}"
+	fi
+	noBakeErrorMessage+="!"
+	errorline "$noBakeErrorMessage"
+	exit 3
+fi
+
+# When no services are specified, build all services having a build context
+if [ 1 -gt ${#buildServices[@]} ]; then
+	buildServices=($(yaml-get --nostdin --query='services.*.build[parent()][name()]' "$bakedComposeFile"))
+
+	# There must be at least one service to build
+	if [ 1 -gt ${#buildServices[@]} ]; then
+		errorline "Could not determine the services to build!" >&2
+		_hasErrors=true
+	else
+		buildMessage="Building all service(s) defined in ${COMPOSE_BASE_FILE}"
+		if [ -n "$overrideComposeFile" ]; then
+			buildMessage+=" and ${overrideComposeFile}"
+		fi
+		buildMessage+=":  ${buildServices[*]}"
+		infoline "$buildMessage"
+		unset buildMessage
+	fi
+fi
+
+# Bail if any errors have been detected
+if $_hasErrors; then
+	exit 1
+fi
+
+# Force certain options when running in development mode; these may not have
+# been set explicitly by the user, but they are required for development.
+if [ "$_deployStage" == "$DEPLOY_STAGE_DEVELOPMENT" ]; then
+	_makePortable=false
+	_pushImages=false
+fi
+
+infoline "Building version ${baseVersion} of the ${_deployStage} environment..."
+infoText="  Using ${COMPOSE_BASE_FILE}"
+if [ -f "$overrideComposeFile" ]; then
+	infoText+=" and ${overrideComposeFile}"
+fi
+infoText+="."
+logline "$infoText"
+echo
+
+# On request, clean the Docker environment
+if $_cleanResources; then
+	logline "Cleaning the Docker environment..."
+	dockerCompose "$bakedComposeFile" "" \
+		--profile "$_deployStage" \
+		down --remove-orphans --rmi all --volumes
+	if [ 0 -ne $? ]; then
+		errorline "Failed to clean the Docker environment." >&2
+		exit 2
+	fi
+else
+	# Stop any running containers
+	logline "\nStopping any running containers..."
+	dockerCompose "$bakedComposeFile" "" \
+		--profile "$_deployStage" \
+		stop
+	if [ 0 -ne $? ]; then
+		errorline "Failed to stop any running containers." >&2
+		exit 2
+	fi
+fi
+
+# Always pull the latest ancilliary images
+dockerCompose "$bakedComposeFile" "" \
+	--profile "$_deployStage" \
+	pull --ignore-buildable
+if [ 0 -ne $? ]; then
+	errorline "Failed to pull the latest Docker images." >&2
+	exit 2
+fi
+
+# When exporting portable images, ensure the target directory exists
+if $_makePortable; then
+	if [ ! -d "$IMAGES_DIRECTORY" ]; then
+		mkdir "$IMAGES_DIRECTORY"
+	fi
+
+	imageIDFile="${IMAGES_DIRECTORY}/LAST-SAVED-IMAGE-IDS.txt"
+	if [ -f "$imageIDFile" ]; then
+		rm -f "$imageIDFile"
+	fi
+fi
+
+# Build each new Docker image; switch to the project directory first to help
+# resolve relative paths.  Note that the build context MUST BE the project
+# directory lest Docker COPY commands fail to find files.  This is becuase
+# Docker explicitly prohibits copying files from outside the build context and
+# this project's main files are indeed outside the Docker build context, and
+# reasonably so.
+cd "${PROJECT_DIRECTORY}"
+
+# Run build-pre.sh when present and executable
+buildPreScript="${PROJECT_DIRECTORY}/build-pre.sh"
+if [ -f "$buildPreScript" ] && [ -x "$buildPreScript" ]; then
+	if ! "$buildPreScript" "$_deployStage" "$bakedComposeFile"; then
+		errorline "Failed to run pre-build script, ${buildPreScript}!" >&2
+		exit 5
+	fi
+fi
+
+for buildService in "${buildServices[@]}"; do
+	# Identify the image name and version
+	imageNameYAMLPath="services.${buildService}.image"
+	imageComposeName=$(yaml-get --nostdin --query="$imageNameYAMLPath" "$bakedComposeFile")
+	if [ 0 -ne $? ]; then
+		missingImageNameMessage="Failed to get image name from ${COMPOSE_BASE_FILE}"
+		if [ -n "$overrideComposeFile" ]; then
+			missingImageNameMessage+=" and ${overrideComposeFile}"
+		fi
+		missingImageNameMessage+="!"
+		errorline "$missingImageNameMessage"
+		unset missingImageNameMessage
+		exit 20
+	fi
+	longDockerImageName=${imageComposeName%:*}				# Strip version
+	dockerImageVersionedName=${imageComposeName#*/}			# Strip registry, keep user
+	shortDockerImageName="${dockerImageVersionedName%%:*}"	# Strip version
+	dockerImageBaseName=${shortDockerImageName##*/}			# Strip registry and user
+	dockerFileBaseName=${shortDockerImageName//\//-}		# Replace slashes with dashes
+
+	# Identify the next available build number for each service's artifact
+	buildNumber=$(getReleaseNumberForVersion "$dockerImageBaseName" "$baseVersion")
+	if [ 0 -ne $? ]; then
+		errorline "Could not determine the build number for ${dockerImageBaseName}!"
+		exit 21
+	fi
+	dockerImageVersion="${baseVersion}-${buildNumber}"
+
+	# Infer various reference and file names
+	dockerImageRef="${longDockerImageName}:${dockerImageVersion}"
+	portableFileName="${dockerFileBaseName}-${dockerImageVersion}.tar.bz"
+	portableQualifiedFile="${IMAGES_DIRECTORY}/${portableFileName}"
+
+	# Reset the version number for this service in the Docker Compose file
+	logline "Setting image to ${dockerImageRef} at ${imageNameYAMLPath} in ${bakedComposeFile}..."
+	yaml-set --nostdin --change="$imageNameYAMLPath" --value="$dockerImageRef" "$bakedComposeFile"
+	if [ 0 -ne $? ]; then
+		errorline "Unable to update image in ${bakedComposeFile} to ${dockerImageRef}!" >&2
+		exit 22
+	fi
+
+	# Perform the actual build
+	lineline "-"
+	infoline "Building version ${dockerImageVersion} of ${dockerImageBaseName} for ${buildService}..."
+	if ! dockerCompose "$bakedComposeFile" "" \
+		--profile "$_deployStage" \
+		build --pull ${buildService}
+	then
+		errorline "Docker build failed!" >&2
+		exit 23
+	fi
+
+	# Run build-post-<service>.sh within the container when present
+	buildPostServiceScript="${PROJECT_DIRECTORY}/build-post-${buildService}.sh"
+	if [ -f "$buildPostServiceScript" ]; then
+		infoline "Running post-build script, ${buildPostServiceScript}, in the ${buildService} container..."
+
+		# Start the container to run the script
+		if ! dockerCompose "$bakedComposeFile" "" \
+			--profile "$_deployStage" \
+			up --detach ${buildService}
+		then
+			errorline "Failed to start the ${buildService} container!" >&2
+			exit 23
+		fi
+		_servicesRunning=true
+		cat "$buildPostServiceScript" | dockerCompose "$bakedComposeFile" "" \
+			--profile "$_deployStage" \
+			exec ${buildService} /bin/bash -s
+		if [ 0 -ne $? ]; then
+			errorline "Failed to run the post-build script, ${buildPostServiceScript}, in the ${buildService} container!" >&2
+			exit 24
+		fi
+	fi
+
+	# Show a brief security summary of the new image
+	docker scout quickview "local://${dockerImageRef}"
+
+	# Tag this new image as latest
+	logline "Tagging the new image as latest..."
+	docker image tag "${dockerImageRef}" "${longDockerImageName}:latest"
+	if [ 0 -ne $? ]; then
+		errorline "Could not tag the new image as latest!" >&2
+		exit 25
+	fi
+
+	# Delete all old versions of the new image
+	logline "Deleting old image versions of ${longDockerImageName}..."
+	declare -a purgeIDs=($(\
+		docker images \
+			--format="{{.ID}}" \
+			--filter="before=${longDockerImageName}:latest" \
+			"${longDockerImageName}:*" \
+		| uniq
+	))
+	if [ 0 -lt ${#purgeIDs} ]; then
+		logline "Deleting old image versions of ${longDockerImageName}:  ${purgeIDs[*]}"
+		echo "${purgeIDs[*]}" | xargs docker rmi --force
+	fi
+
+	# Optionally push to the Docker registry
+	if $_pushImages; then
+		# Note that two pushes are required because Docker Compose will only
+		# push the tag that is present in the Compose file, which is the
+		# versioned tag.  We want to push both the versioned and latest tags.
+		infoline "Pushing the new versioned image to the registry..."
+		dockerCompose "$bakedComposeFile" "" \
+			--profile "$_deployStage" \
+			push ${buildService}
+		if [ 0 -ne $? ]; then
+			errorline "Could not push the new versioned image to the registry!" >&2
+			exit 26
+		fi
+
+		logline "Pushing tag, latest, to the registry for the new image..."
+		docker push "${longDockerImageName}:latest"
+		if [ 0 -ne $? ]; then
+			errorline "Could not push the 'latest' image to the registry!" >&2
+			exit 27
+		fi
+	else
+		logline "Skipping push of the new image to the registry."
+	fi
+
+	# --------------------------------------------------------------------------
+	# Everything beyond this point is for exporting a portable image
+	# --------------------------------------------------------------------------
+	if ! $_makePortable; then
+		infoline "Skipping portable copy of the new image."
+		continue
+	fi
+
+	# Track the ID of the new image for deployment
+	savedImageID=$(docker images --format="{{.ID}}" ${dockerImageRef})
+	if [ 0 -ne $? ]; then
+		errorline "Could not determine the ID of the new image!" >&2
+		exit 28
+	fi
+	echo -e "${dockerImageBaseName}:${dockerImageVersion}\t${savedImageID}\t${portableQualifiedFile}" >>"$imageIDFile"
+
+	# Save a portable copy of each new image
+	logline "Deleting any old portable copies of ${dockerFileBaseName}..."
+	rm "$IMAGES_DIRECTORY"/${dockerFileBaseName}-*.tar.bz
+
+	infoline "Saving a portable copy of the newest image, ${dockerImageRef}, as ${portableQualifiedFile}..."
+	docker save "$dockerImageRef" | bzip2 >"$portableQualifiedFile"
+	retValCompress=${PIPESTATUS[1]}
+	retValSave=${PIPESTATUS[0]}
+	if [ 0 -ne $retValSave ]; then
+		errorline "Could not save the new image; got exit code, ${retValSave}!" >&2
+		exit 29
+	elif [ 0 -ne $retValCompress ]; then
+		errorline "Could not compress the new image; got exit code, ${retValCompress}!" >&2
+		exit 30
+	fi
+
+	cat <<EOF
+
+You can import the new image using this command (it will be version-tagged):
+	docker load -i ${portableFileName}
+
+When you want the newly imported image to additionally be tagged 'latest', also
+run:
+	docker image tag ${savedImageID} ${shortDockerImageName}:latest
+
+EOF
+done
+
+# Run build-post.sh when present and executable
+buildPostScript="${PROJECT_DIRECTORY}/build-post.sh"
+if [ -f "$buildPostScript" ] && [ -x "$buildPostScript" ]; then
+	if ! "$buildPostScript" "$_deployStage" "$bakedComposeFile"; then
+		errorline "Failed to run post-build script!" >&2
+		exit 31
+	fi
+fi
+
+if $_servicesRunning; then
+	if ! $_startEnvironment; then
+		# Stop the environment
+		./stop.sh --stage "$_deployStage"
+		if [ 0 -ne $? ]; then
+			errorline "Failed to stop the environment!" >&2
+			exit 33
+		fi
+		_servicesRunning=false
+	fi
+else
+	if $_startEnvironment; then
+		# Bring up the environment and wait for the primary service to be ready
+		./start.sh --stage "$_deployStage"
+		if [ 0 -ne $? ]; then
+			errorline "Failed to start the environment!" >&2
+			exit 34
+		fi
+		_servicesRunning=true
+	fi
+fi
+
+cat <<-EOF
+
+Your ${_deployStage} environment is built and ready!  The local container(s) are
+EOF
+if $_servicesRunning; then
+	cat <<-EOF
+up and running!  To stop the environment, run:
+	./stop.sh --stage ${_deployStage}
+EOF
+else
+	cat <<-EOF
+stopped.  To start the environment, run:
+	./start.sh --stage ${_deployStage}
+EOF
+fi

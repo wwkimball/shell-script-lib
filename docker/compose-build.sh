@@ -49,7 +49,6 @@ MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../" && pwd)"
 LIB_DIRECTORY="${MY_DIRECTORY}/../"
 DOCKER_DIRECTORY="${PROJECT_DIRECTORY}/docker"
-IMAGES_DIRECTORY="${DOCKER_DIRECTORY}/images"
 COMPOSE_BASE_FILE="${DOCKER_DIRECTORY}/docker-compose.yaml"
 DEPLOY_STAGE_DEVELOPMENT=development
 DEPLOY_STAGE_LAB=lab
@@ -57,9 +56,9 @@ DEPLOY_STAGE_QA=qa
 DEPLOY_STAGE_STAGING=staging
 DEPLOY_STAGE_PRODUCTION=production
 readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
-	DOCKER_DIRECTORY IMAGES_DIRECTORY COMPOSE_BASE_FILE \
-	DEPLOY_STAGE_DEVELOPMENT DEPLOY_STAGE_LAB DEPLOY_STAGE_QA \
-	DEPLOY_STAGE_STAGING DEPLOY_STAGE_PRODUCTION
+	DOCKER_DIRECTORY COMPOSE_BASE_FILE DEPLOY_STAGE_DEVELOPMENT \
+	DEPLOY_STAGE_LAB DEPLOY_STAGE_QA DEPLOY_STAGE_STAGING \
+	DEPLOY_STAGE_PRODUCTION
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
@@ -72,6 +71,7 @@ _bakedDir="${TMPDIR:-$(dirname $(mktemp -u))}"
 _cleanResources=false
 _deployStage=$DEPLOY_STAGE_DEVELOPMENT
 _hasErrors=false
+_imagesDirectory="${DOCKER_DIRECTORY}/images"
 _imageVersionFile="${PROJECT_DIRECTORY}/VERSION"
 _makePortable=true
 _pushImages=true
@@ -151,7 +151,7 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        ${DEPLOY_STAGE_DEVELOPMENT}.
   -i IMAGE_DIR, --images IMAGE_DIR
        The directory to save portable copies of the new image to.  Defaults to
-       ${IMAGES_DIRECTORY}.
+       ${_imagesDirectory}.
   -P, --no-push
        Do NOT push the new image(s) to the Docker registry.  The default is
        to push the new image(s) to the registry.  Implied when DEPLOY_STAGE is
@@ -187,7 +187,7 @@ EOHELP
 				errorline "Missing value for $1 option!"
 				_hasErrors=true
 			else
-				IMAGES_DIRECTORY="$2"
+				_imagesDirectory="$2"
 				shift
 			fi
 			;;
@@ -381,11 +381,11 @@ fi
 
 # When exporting portable images, ensure the target directory exists
 if $_makePortable; then
-	if [ ! -d "$IMAGES_DIRECTORY" ]; then
-		mkdir "$IMAGES_DIRECTORY"
+	if [ ! -d "$_imagesDirectory" ]; then
+		mkdir "$_imagesDirectory"
 	fi
 
-	imageIDFile="${IMAGES_DIRECTORY}/LAST-SAVED-IMAGE-IDS.txt"
+	imageIDFile="${_imagesDirectory}/LAST-SAVED-IMAGE-IDS.txt"
 	if [ -f "$imageIDFile" ]; then
 		rm -f "$imageIDFile"
 	fi
@@ -439,7 +439,7 @@ for buildService in "${buildServices[@]}"; do
 	# Infer various reference and file names
 	dockerImageRef="${longDockerImageName}:${dockerImageVersion}"
 	portableFileName="${dockerFileBaseName}-${dockerImageVersion}.tar.bz"
-	portableQualifiedFile="${IMAGES_DIRECTORY}/${portableFileName}"
+	portableQualifiedFile="${_imagesDirectory}/${portableFileName}"
 
 	# Reset the version number for this service in the Docker Compose file
 	logline "Setting image to ${dockerImageRef} at ${imageNameYAMLPath} in ${bakedComposeFile}..."
@@ -550,7 +550,7 @@ for buildService in "${buildServices[@]}"; do
 
 	# Save a portable copy of each new image
 	logline "Deleting any old portable copies of ${dockerFileBaseName}..."
-	rm "$IMAGES_DIRECTORY"/${dockerFileBaseName}-*.tar.bz
+	rm "$_imagesDirectory"/${dockerFileBaseName}-*.tar.bz
 
 	infoline "Saving a portable copy of the newest image, ${dockerImageRef}, as ${portableQualifiedFile}..."
 	docker save "$dockerImageRef" | bzip2 >"$portableQualifiedFile"

@@ -32,7 +32,7 @@ function dockerCompose() {
 ###
 # Define a function which waits for a named Docker Compose service to be ready.
 #
-# @param string $1 The profile name; one of development, qa, staging, or
+# @param string $1 The profile name; one of development, lab, qa, staging, or
 #                  production.
 # @param string $2 The name of the service to wait for.
 # @param string $3 The base Docker Compose file.
@@ -66,7 +66,7 @@ function awaitService() {
 	trap "rm -f '$tempFile'" EXIT
 
 	echo
-	echo "Waiting for ${serviceName} to return [${readyCheck}] from [${readyCommand}]..."
+	echo "Waiting for ${serviceName} to become ready..."
 	while ! dockerCompose "$mainComposeFile" "$envComposeFile" \
 		--profile "$profileName" \
 		exec "$serviceName" \
@@ -111,7 +111,7 @@ function awaitService() {
 ###
 # Start the environment and wait for a named service to be ready.
 #
-# @param string $1 The profile name; one of development, qa, staging, or
+# @param string $1 The profile name; one of development, lab, qa, staging, or
 #                  production.
 # @param string $2 The name of the service to wait for.
 # @param string $3 The base Docker Compose file.
@@ -159,7 +159,7 @@ function startAndAwaitService() {
 # must be present in or relative to the current directory.
 #
 # @param string $1 The output file to create with the baked configuration.
-# @param string $2 The profile name; one of development, qa, staging, or
+# @param string $2 The profile name; one of development, lab, qa, staging, or
 #                  production.
 # @param string $3 The base Docker Compose file.
 # @param string $4 The optional override Docker Compose file.
@@ -196,7 +196,7 @@ function bakeComposeFile() {
 # environment file would be ".env.development".
 #
 # @param string $1 The output file to create with the baked configuration.
-# @param string $2 The profile name; one of development, qa, staging,
+# @param string $2 The profile name; one of development, lab, qa, staging,
 #                  production, and so on.  This is also the identifier to seek
 #				   in the filenames.  Defaults to "development".
 # @param string $3 The source directory to look in for the base files.
@@ -285,7 +285,7 @@ function dynamicBakeComposeFile() {
 # and the result is returned as a boolean value.
 #
 # @param string $1 The file to evaluate.
-# @param string $2 The profile name; one of development, qa, staging, or
+# @param string $2 The profile name; one of development, lab, qa, staging, or
 #                  production.  Defaults to "development".
 # @param string $3 The source directory to look in for the base files.
 #                  Defaults to the directory of the given file.

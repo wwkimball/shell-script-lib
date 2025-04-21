@@ -51,7 +51,7 @@ fi
 
 # Process command-line arguments, if there are any
 _hasErrors=false
-_deployStage=$_deployStageDevelopment
+_deployStage=$DEPLOY_STAGE_DEVELOPMENT
 _cleanResources=false
 _destroyVolumes=false
 while [ $# -gt 0 ]; do

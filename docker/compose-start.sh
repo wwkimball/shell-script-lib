@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# Start the environment and await the primary service.
+# Start the Docker Compose stack for a given deployment stage.
 #
 # External control variables:
 # TMPDIR <string> The directory in which to create temporary files like baked
@@ -208,7 +208,7 @@ echo "Starting the ${_deployStage} environment..."
 # Run the pre-start script, if it exists
 startPreScript="${PROJECT_DIRECTORY}/start-pre.sh"
 if [ -f "$startPreScript" ] && [ -x "$startPreScript" ]; then
-	infoline "Running discovered pre-start.sh script..."
+	infoline "Running discovered script, ${startPreScript}..."
 	if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
 	then
 		errorline "Pre-start script, ${startPreScript}, failed!"
@@ -218,7 +218,8 @@ fi
 
 # Start the environment
 if ! dockerCompose "$bakedComposeFile" "" \
-	up --detach --remove-orphans
+		--profile "$_deployStage" up --detach \
+		--wait --remove-orphans
 then
 	errorline "Failed to start the environment!"
 	exit 4
@@ -227,7 +228,7 @@ fi
 # Run the post-start script, if it exists
 startPostScript="${PROJECT_DIRECTORY}/start-post.sh"
 if [ -f "$startPostScript" ] && [ -x "$startPostScript" ]; then
-	infoline "Running discovered start-post.sh script..."
+	infoline "Running discovered script, ${startPostScript}..."
 	if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
 	then
 		warnline "Post-start script, ${startPostScript}, failed!"

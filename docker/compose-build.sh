@@ -242,19 +242,19 @@ if [ 0 -lt $# ]; then
 fi
 
 # Verify Docker is running
-if ! docker info 2>&1 >/dev/null; then
+if ! docker info >/dev/null 2>&1; then
 	logError "Docker is not running!" >&2
 	_hasErrors=true
 fi
 
 # Verify Docker Compose is installed
-if ! docker compose --version 2>&1 >/dev/null; then
+if ! docker compose --version >/dev/null 2>&1; then
 	logError "Docker Compose is not installed!" >&2
 	_hasErrors=true
 fi
 
 # yamlpath (and Python 3) is required to parse various files
-if ! yaml-get --version 2>&1 >/dev/null; then
+if ! yaml-get --version >/dev/null 2>&1; then
 	logError "yamlpath (https://github.com/wwkimball/yamlpath?tab=readme-ov-file#installing) is not installed!" >&2
 	_hasErrors=true
 fi

@@ -242,19 +242,19 @@ if [ 0 -lt $# ]; then
 fi
 
 # Verify Docker is running
-if ! docker info >/dev/null 2>&1; then
+if ! docker info 2>&1 >/dev/null; then
 	logError "Docker is not running!" >&2
 	_hasErrors=true
 fi
 
 # Verify Docker Compose is installed
-if ! docker compose --version >/dev/null 2>&1; then
+if ! docker compose --version 2>&1 >/dev/null; then
 	logError "Docker Compose is not installed!" >&2
 	_hasErrors=true
 fi
 
 # yamlpath (and Python 3) is required to parse various files
-if ! yaml-get --version >/dev/null 2>&1; then
+if ! yaml-get --version 2>&1 >/dev/null; then
 	logError "yamlpath (https://github.com/wwkimball/yamlpath?tab=readme-ov-file#installing) is not installed!" >&2
 	_hasErrors=true
 fi
@@ -269,6 +269,11 @@ else
 		logError "Version number not present in the first line of, ${_imageVersionFile}!" >&2
 		_hasErrors=true
 	fi
+fi
+
+# Bail if any system state or user input errors have been detected
+if $_hasErrors; then
+	exit 1
 fi
 
 # Identify the Docker Compose override files to use
@@ -304,8 +309,7 @@ if [ 0 -ne $? ]; then
 		noBakeErrorMessage+=" with ${overrideComposeFile}"
 	fi
 	noBakeErrorMessage+="!"
-	logError "$noBakeErrorMessage"
-	exit 3
+	errorOut 3 "$noBakeErrorMessage"
 fi
 
 # When no services are specified, build all services having a build context
@@ -314,8 +318,7 @@ if [ 1 -gt ${#buildServices[@]} ]; then
 
 	# There must be at least one service to build
 	if [ 1 -gt ${#buildServices[@]} ]; then
-		logError "Could not determine the services to build!" >&2
-		_hasErrors=true
+		errorOut 1 "Could not determine the services to build!"
 	else
 		buildMessage="Building all service(s) defined in ${COMPOSE_BASE_FILE}"
 		if [ -n "$overrideComposeFile" ]; then
@@ -325,11 +328,6 @@ if [ 1 -gt ${#buildServices[@]} ]; then
 		logInfo "$buildMessage"
 		unset buildMessage
 	fi
-fi
-
-# Bail if any errors have been detected
-if $_hasErrors; then
-	exit 1
 fi
 
 # Force certain options when running in development mode; these may not have

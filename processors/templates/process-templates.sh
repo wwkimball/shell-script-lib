@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 ###############################################################################
 # Populate variables in template files.
 #
@@ -23,14 +23,9 @@
 # bare, $ENVIRONMENT_VARIABLE, variable names.  The substitution is
 # case-sensitive.
 #
-# The following environment variables MUST be set to control the behavior of
-# this script:
-#   * TEMPLATE_DIRECTORY:  The directory in which the template files are found.
-#
-# The following environment variables MAY be set to control the behavior of
-# this script:
-#   - LIB_DIRECTORY:  The base directory of the library in which this script
-#     resides.
+# The following environment variables MAY be set to specify the default values
+# for certain command-line arguments:
+#   - TEMPLATE_DIRECTORY:  The directory in which the template files are found.
 #   - TEMPLATE_EXTENSION:  The file extension of the template files.  The
 #     default value is ".template".
 #   - DEPLOYMENT_STAGE:  The name of the deployment stage for which the files
@@ -39,16 +34,22 @@
 #     following logging levels are supported to increase verbosity:
 #     - VERBOSE:  Verbose messages.
 #     - DEBUG:  Debugging information.
+#
+# Copyright 2025 William W. Kimball, Jr. MBA MSIS
+# All rights reserved.
 ###############################################################################
+# Due to the destructive nature of this script, it shall bail out on any error
+# condition.  This includes any command which returns a non-zero exit status
+# that is not explicitly handled within this script.
 set -e
-templateDirectory=${TEMPLATE_DIRECTORY:?"ERROR:  The TEMPLATE_DIRECTORY environment variable must be set!"}
+
+# Constants
+MY_VERSION='2025.04.24-1'
+MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIRECTORY="${MY_DIRECTORY}/../../"
+readonly MY_VERSION MY_DIRECTORY LIB_DIRECTORY
 
 # Import the logging facility
-if [ -z "$LIB_DIRECTORY" ]; then
-	MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	LIB_DIRECTORY="${MY_DIRECTORY}/../../"
-	readonly MY_DIRECTORY LIB_DIRECTORY
-fi
 loggingLib="${LIB_DIRECTORY}/logging/set-logger.sh"
 if ! source "$loggingLib"; then
 	echo "ERROR:  Unable to source ${loggingLib}!" >&2
@@ -56,39 +57,176 @@ if ! source "$loggingLib"; then
 fi
 unset loggingLib
 
-# Check whether the deployment stage is set and convert it to lower and upper
-# case for processing when it is.
-ambiguateEnvironmentVariables=false
-ucEnvironmentName=''
-if [ -n "$DEPLOYMENT_STAGE" ]; then
-	ambiguateEnvironmentVariables=true
-	ucEnvironmentName=${DEPLOYMENT_STAGE^^}
-fi
+# Process command-line arguments, if there are any; some accept environment
+# variables as their default values.
+_ambiguateEnvironmentVariables=false
+_deploymentStage=${DEPLOYMENT_STAGE:-""}
+_hasErrors=false
+_logLevel=${LOG_LEVEL:-"NORMAL"}
+_templateDirectory=${TEMPLATE_DIRECTORY:-$(pwd)}
+_templateExtension=${TEMPLATE_EXTENSION:-".template"}
+_ucDeploymentStage=''
+declare -a _substitutionVars
+while [ $# -gt 0 ]; do
+	case $1 in
+		-d|--directory)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_templateDirectory="$2"
+				shift
+			fi
+			;;
 
-# Check whether the template extension is set and convert it to lower case for
-# processing when it is.
-templateExtension=${TEMPLATE_EXTENSION:-".template"}
-templateExtension=${templateExtension,,}
-if [[ ! "$templateExtension" =~ ^\.[a-zA-Z0-9_]+$ ]]; then
-	errorOut 1 "Invalid template extension:  ${templateExtension}"
-fi
+		-e|--extension)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_templateExtension="$2"
+				shift
+			fi
+			;;
+
+		-h|--help)
+			cat <<EOHELP
+$0 [OPTIONS] [--] [VARIABLE_NAME ...]
+
+This script processes template files in a specified directory, interpolating
+environment variables into the template files.  In order to facilitate and
+control the substitutions, this script accepts a list of environment variable
+names to be used as positional arguments.  The template files are identified
+by the presence of a special extension within their file name, which is
+".template", by default (and can be changed by setting -e|--extension).  This
+extension is removed from the file name when the template is processed.  See
+other options for more information and additional control mechanisms.
+
+OPTIONS include:
+  -d DIRECTORY, --directory DIRECTORY
+       The directory in which the template files are found.  The default value
+       is the current working directory.
+  -e EXTENSION, --extension EXTENSION
+       The removable extension of the target template files.  A dot (.) must be
+       the first character of the EXTENSION.  The default value is ".template".
+  -h, --help
+       Display this help message and exit.
+  -s STAGE, --stage STAGE
+       The optional name of the deployment stage for which the files are being
+       prepared.  When set, each VARIABLE_NAME will be checked for the existence
+       of a deployment stage-specific variable name matching the pattern:
+       \${VARIABLE_NAME}_\${DEPLOYMENT_STAGE}.  If it exists, the value of the
+       deployment stage-specific variable will be copied to the base variable
+       name AS LONG AS the base variable is unset at the time of evaluation.
+       This allows for the dynamic use of deployment stage-specific values.
+       Note that any value supplied will be cast to upper-case for evaulation.
+       The default value is empty.
+  -v, --verbose
+       Enable verbose logging.  This option may be specified up to twice to
+	   increase verbosity from verbose to debug.
+  --version
+       Display the version of this script and exit.
+
+EOHELP
+			exit 0
+			;;
+
+		-s|--stage)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_deploymentStage="$2"
+				shift
+			fi
+			;;
+
+		-v|--verbose)
+			# Increase the verbosity of output logging
+			case $_logLevel in
+				# NORMAL->VERBOSE
+				NORMAL)
+					_logLevel="VERBOSE"
+					;;
+				# VERBOSE->DEBUG; ignore anything else
+				*)
+					_logLevel="DEBUG"
+					;;
+			esac
+			;;
+
+		-v|--version)
+			echo "$0 ${MY_VERSION}"
+			exit 0
+			;;
+
+		--)	# Explicit end of options
+			shift
+			break
+			;;
+
+		-*)
+			logError "Unknown option:  $1"
+			_hasErrors=true
+			;;
+
+		*)	# Implicit end of options
+			break
+			;;
+	esac
+
+	shift
+done
 
 # Check whether the template directory exists, is a directory, and is readable
-if [ ! -d "$templateDirectory" ] || [ ! -r "$templateDirectory" ]; then
-	errorOut 1 "The template directory, ${templateDirectory}, does not exist, is not a directory, or cannot be read by this process!"
+if [ ! -d "$_templateDirectory" ] || [ ! -r "$_templateDirectory" ]; then
+	logError "The template directory, ${_templateDirectory}, does not exist, is not a directory, or cannot be read by this process!"
+	_hasErrors=true
 fi
 
 # Check whether the template directory is writable
-if [ ! -w "$templateDirectory" ]; then
-	errorOut 1 "Files in template directory, ${templateDirectory}, cannot be written by this process!"
+if [ ! -w "$_templateDirectory" ]; then
+	logError "Files in template directory, ${_templateDirectory}, cannot be written by this process!"
+	_hasErrors=true
+fi
+
+# Check whether the template extension is set and is valid
+if [[ ! "$_templateExtension" =~ ^\.[a-zA-Z0-9_]+$ ]]; then
+	logError "Invalid template extension:  ${_templateExtension}"
+	_hasErrors=true
+fi
+
+# There must be at least one environment variable name provided
+if [ 0 -eq $# ]; then
+	logError "No environment variable names were supplied for template interpolation!"
+	_hasErrors=true
+fi
+
+# Bail when there are any errors
+if $_hasErrors; then
+	exit 1
+fi
+
+# Accept the remaining arguments as environment variable names to be
+# interpolated into the template files.  The variable names are stored in an
+# array for later processing.
+for _substitutionVar in "$@"; do
+	_substitutionVars+=("$_substitutionVar")
+done
+
+# Check whether the deployment stage is set and convert it to upper-case for
+# processing when it is.
+if [ -n "$_deploymentStage" ]; then
+	_ambiguateEnvironmentVariables=true
+	_ucDeploymentStage=${_deploymentStage^^}
 fi
 
 # Create a function which accepts a base environment variable name and checks
-# for the existence of the environment-specific variable.  If it exists, the
-# environment-specific variable's value is copied to the base variable.
+# for the existence of the deployment stage-specific variable.  If it exists,
+# the deployment stage-specific variable's value is copied to the base variable.
 function ambiguateEnvironmentVariable() {
 	local baseVarName=${1:?"ERROR:  A base environment variable name must be provided as the first positional argument to ${FUNCNAME[0]}!"}
-	local deploymentStage=${2:?"ERROR:  An environment name must be provided as the second positional argument to ${FUNCNAME[0]}!"}
+	local deploymentStage=${2:?"ERROR:  A deployment stage name must be provided as the second positional argument to ${FUNCNAME[0]}!"}
 	local envVarName="${baseVarName}_${deploymentStage}"
 
 	# Do nothing when the base variable already has a value
@@ -123,7 +261,8 @@ function substituteTemplateVariables() {
 
 # Function to process template files
 function processTemplateFiles() {
-	local templateExtension=${1:?"ERROR:  A template extension must be provided as the first positional argument to ${FUNCNAME[0]}!"}
+	local templateDirectory=${1:?"ERROR:  A template directory must be provided as the first positional argument to ${FUNCNAME[0]}!"}
+	local templateExtension=${2:?"ERROR:  A template extension must be provided as the second positional argument to ${FUNCNAME[0]}!"}
 	local templateFiles=$(find "$templateDirectory" -maxdepth 1 -iname "*.${templateExtension}")
 	local templateFile templateText concreteFile
 	for templateFile in $templateFiles; do
@@ -153,22 +292,12 @@ function processTemplateFiles() {
 	done
 }
 
-# Accept as command-line arguments a list of environment variable names to be
-# substituted in the template files.
-declare -a _substitutionVars
-if [ 0 -eq $# ]; then
-	errorOut 1 "No environment variable names were supplied!"
-fi
-for varName in "$@"; do
-	_substitutionVars+=("$varName")
-done
-
-# Copy environment-specific variables to the base variables provided
-if $ambiguateEnvironmentVariables; then
+# Copy deployment stage-specific variables to the base variables provided
+if $_ambiguateEnvironmentVariables; then
 	for varName in "${_substitutionVars[@]}"; do
-		ambiguateEnvironmentVariable "$varName" "$ucEnvironmentName"
+		ambiguateEnvironmentVariable "$varName" "$_ucDeploymentStage"
 	done
 fi
 
 # Process template files
-processTemplateFiles "$templateExtension"
+processTemplateFiles "$_templateDirectory" "$_templateExtension"

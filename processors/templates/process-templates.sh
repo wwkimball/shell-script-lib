@@ -61,8 +61,10 @@ unset loggingLib
 # variables as their default values.
 _ambiguateEnvironmentVariables=false
 _deploymentStage=${DEPLOYMENT_STAGE:-""}
+_forceOverwrite=false
 _hasErrors=false
 _logLevel=${LOG_LEVEL:-"NORMAL"}
+_preserveTemplateFiles=false
 _templateDirectory=${TEMPLATE_DIRECTORY:-$(pwd)}
 _templateExtension=${TEMPLATE_EXTENSION:-".template"}
 _ucDeploymentStage=''
@@ -89,6 +91,11 @@ while [ $# -gt 0 ]; do
 			fi
 			;;
 
+		-f|--force)
+			# Force overwriting existing concrete files
+			_forceOverwrite=true
+			;;
+
 		-h|--help)
 			cat <<EOHELP
 $0 [OPTIONS] [--] [VARIABLE_NAME ...]
@@ -105,12 +112,22 @@ other options for more information and additional control mechanisms.
 OPTIONS include:
   -d DIRECTORY, --directory DIRECTORY
        The directory in which the template files are found.  The default value
-       is the current working directory.
+       can be set via the TEMPLATE_DIRECTORY environment variable.  Present
+       default:
+       ${_templateDirectory}
   -e EXTENSION, --extension EXTENSION
        The removable extension of the target template files.  A dot (.) must be
-       the first character of the EXTENSION.  The default value is ".template".
+       the first character of the EXTENSION.  The default value can be set via
+       the TEMPLATE_EXTENSION environment variable.  Present default:
+       ${_templateExtension}
+  -f, --force
+       Force overwriting existing concrete files.  By default, this script will
+       not overwrite existing files.
   -h, --help
        Display this help message and exit.
+  -p, --preserve
+       Preserve the template files after processing.  By default, this script
+       will delete the template files after processing.
   -s STAGE, --stage STAGE
        The optional name of the deployment stage for which the files are being
        prepared.  When set, each VARIABLE_NAME will be checked for the existence
@@ -120,15 +137,22 @@ OPTIONS include:
        name AS LONG AS the base variable is unset at the time of evaluation.
        This allows for the dynamic use of deployment stage-specific values.
        Note that any value supplied will be cast to upper-case for evaulation.
-       The default value is empty.
+       The default value is empty.  The default value can be set via the
+       DEPLOYMENT_STAGE environment variable.  Present default:
+       ${_deploymentStage}
   -v, --verbose
        Enable verbose logging.  This option may be specified up to twice to
-	   increase verbosity from verbose to debug.
+       increase verbosity from verbose to debug.
   --version
        Display the version of this script and exit.
 
 EOHELP
 			exit 0
+			;;
+
+		-p|--preserve)
+			# Preserve the template files after processing
+			_preserveTemplateFiles=true
 			;;
 
 		-s|--stage)
@@ -155,7 +179,7 @@ EOHELP
 			esac
 			;;
 
-		-v|--version)
+		--version)
 			echo "$0 ${MY_VERSION}"
 			exit 0
 			;;
@@ -177,6 +201,9 @@ EOHELP
 
 	shift
 done
+
+# Promote the assigned log level
+export LOG_LEVEL=$_logLevel
 
 # Check whether the template directory exists, is a directory, and is readable
 if [ ! -d "$_templateDirectory" ] || [ ! -r "$_templateDirectory" ]; then
@@ -204,6 +231,7 @@ fi
 
 # Bail when there are any errors
 if $_hasErrors; then
+	logDebug "Exiting with errors..."
 	exit 1
 fi
 
@@ -263,10 +291,12 @@ function substituteTemplateVariables() {
 function processTemplateFiles() {
 	local templateDirectory=${1:?"ERROR:  A template directory must be provided as the first positional argument to ${FUNCNAME[0]}!"}
 	local templateExtension=${2:?"ERROR:  A template extension must be provided as the second positional argument to ${FUNCNAME[0]}!"}
-	local templateFiles=$(find "$templateDirectory" -maxdepth 1 -iname "*.${templateExtension}")
+	local forceOverwrite=${3:-false}
+	local preserveTemplateFiles=${4:-false}
+	local templateFiles=$(find "$templateDirectory" -maxdepth 1 -type f -iname "*${templateExtension}*")
 	local templateFile templateText concreteFile
 	for templateFile in $templateFiles; do
-		logInfo "Processing ${templateFile}..."
+		logVerbose "Processing ${templateFile}..."
 		templateText=$(cat "$templateFile")
 		if [ 0 -ne $? ]; then
 			errorOut 2 "Unable to read ${templateFile}!"
@@ -275,18 +305,23 @@ function processTemplateFiles() {
 		# Perform variable substitution
 		templateText=$(substituteTemplateVariables "$templateText")
 
-		# Identify the concrete filename by removing the template string
-		concreteFile=${templateFile%${templateExtension}*}
-		concreteFile=${concreteFile##*/}
-		concreteFile="${templateDirectory}/${concreteFile}"
+		# Remove the template extension from the file name
+		concreteFile="${templateFile//${templateExtension}/}"
+		if [ "$templateFile" == "$concreteFile" ]; then
+			errorOut 4 "Concrete and template file names are identical:  ${templateFile}"
+		fi
+		if [ -e "$concreteFile" ] && ! $forceOverwrite; then
+			errorOut 5 "Concrete file, ${concreteFile}, already exists!  Set --force to overwrite."
+		fi
 
 		# Write the result to the concrete file and delete the template file
+		logDebug "Saving interpolated template to ${concreteFile}..."
 		echo "$templateText" >"$concreteFile"
 		if [ 0 -ne $? ]; then
 			errorOut 3 "Unable to write ${concreteFile}!"
 		fi
 
-		if ! rm -f "$templateFile"; then
+		if ! $preserveTemplateFiles && ! rm -f "$templateFile"; then
 			logWarning "Unable to delete ${templateFile}!"
 		fi
 	done
@@ -300,4 +335,5 @@ if $_ambiguateEnvironmentVariables; then
 fi
 
 # Process template files
-processTemplateFiles "$_templateDirectory" "$_templateExtension"
+logVerbose "Processing template files in ${_templateDirectory} with extension ${_templateExtension}..."
+processTemplateFiles "$_templateDirectory" "$_templateExtension" $_forceOverwrite $_preserveTemplateFiles

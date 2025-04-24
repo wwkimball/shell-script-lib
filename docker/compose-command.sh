@@ -26,7 +26,7 @@ cd "${PROJECT_DIRECTORY}"
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
-	errorline "Failed to import shell helpers!" >&2
+	logError "Failed to import shell helpers!" >&2
 	exit 2
 fi
 
@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
 	case $1 in
 		-d|--stage)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				if [[ "$2" =~ ^[Dd] ]]; then
@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
 				elif [[ "$2" =~ ^[Pp] ]]; then
 					_deployStage=$DEPLOY_STAGE_PRODUCTION
 				else
-					errorline "Unsupported value, ${2}, for $1 option."
+					logError "Unsupported value, ${2}, for $1 option."
 					_hasErrors=true
 				fi
 				shift
@@ -100,7 +100,7 @@ EOHELP
 			;;
 
 		-v|--version)
-			logline "$0 ${MY_VERSION}"
+			logLine "$0 ${MY_VERSION}"
 			exit 0
 			;;
 
@@ -110,7 +110,7 @@ EOHELP
 			;;
 
 		-*)
-			errorline "Unknown option:  $1"
+			logError "Unknown option:  $1"
 			_hasErrors=true
 			;;
 
@@ -140,7 +140,7 @@ if $_hasErrors; then
 fi
 
 if $_showMyOutput; then
-	logline "Running '$@' against the ${_deployStage} environment..."
+	logLine "Running '$@' against the ${_deployStage} environment..."
 fi
 
 # Bake the Docker Compose configuration file only if it is not already baked
@@ -148,7 +148,7 @@ fi
 bakedComposeFile=
 if isBakedComposeFile "$COMPOSE_BASE_FILE" "$_deployStage"; then
 	if $_showMyOutput; then
-		logline "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
+		logLine "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
 	fi
 	bakedComposeFile="$COMPOSE_BASE_FILE"
 else
@@ -170,7 +170,7 @@ else
 			noBakeErrorMessage+=" with ${overrideComposeFile}"
 		fi
 		noBakeErrorMessage+="!"
-		errorline "$noBakeErrorMessage"
+		logError "$noBakeErrorMessage"
 		exit 3
 	fi
 fi

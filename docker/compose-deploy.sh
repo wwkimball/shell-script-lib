@@ -29,7 +29,7 @@ readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
-	errorline "Failed to import shell helpers!" >&2
+	logError "Failed to import shell helpers!" >&2
 	exit 2
 fi
 
@@ -46,7 +46,7 @@ while [ $# -gt 0 ]; do
 	case $1 in
 		-d|--stage)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				if [[ "$2" =~ ^[Dd] ]]; then
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
 				elif [[ "$2" =~ ^[Pp] ]]; then
 					_deployStage=$DEPLOY_STAGE_PRODUCTION
 				else
-					errorline "Unsupported value, ${2}, for $1 option."
+					logError "Unsupported value, ${2}, for $1 option."
 					_hasErrors=true
 				fi
 				shift
@@ -70,7 +70,7 @@ while [ $# -gt 0 ]; do
 
 		-g|--group)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				_dockerGroup="$2"
@@ -121,7 +121,7 @@ EOF
 
 		-i|--images)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				_imagesDirectory="$2"
@@ -135,7 +135,7 @@ EOF
 
 		-r|--dir)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				_destinationDir="$2"
@@ -148,7 +148,7 @@ EOF
 			;;
 
 		-v|--version)
-			logline "$MY_VERSION"
+			logLine "$MY_VERSION"
 			exit 0
 			;;
 
@@ -158,7 +158,7 @@ EOF
 			;;
 
 		-*)
-			errorline "Unknown option:  $1"
+			logError "Unknown option:  $1"
 			_hasErrors=true
 			;;
 
@@ -176,7 +176,7 @@ fi
 
 # There must be at least one deploy host
 if [ ${#_deployToHosts[@]} -eq 0 ]; then
-	errorline "At least one deployment HOST must be specified!"
+	logError "At least one deployment HOST must be specified!"
 	_hasErrors=true
 fi
 
@@ -189,7 +189,7 @@ fi
 imageIDFile="${_imagesDirectory}/LAST-SAVED-IMAGE-IDS.txt"
 if $_deployPortable; then
 	if [ ! -f "$imageIDFile" ]; then
-		warnline "Image deployment requested, but no image ID file found at ${imageIDFile}.  To suppress this warning, disable portable deployment or build the image(s) to ${_imagesDirectory}." >&2
+		logWarning "Image deployment requested, but no image ID file found at ${imageIDFile}.  To suppress this warning, disable portable deployment or build the image(s) to ${_imagesDirectory}." >&2
 		_deployPortable=false
 	fi
 fi
@@ -218,7 +218,7 @@ fi
 # Bake the Docker Compose configuration file into the temporary, virtual
 # directory structure.  The baked file MUST be named "docker-compose.yaml" for
 # Docker Compose to find it.
-logline "Baking the Docker Compose configuration file..."
+logLine "Baking the Docker Compose configuration file..."
 bakedComposeFile="${virtualDockerDir}/docker-compose.yaml"
 dynamicBakeComposeFile "$bakedComposeFile" "$_deployStage" "$DOCKER_DIRECTORY"
 if [ 0 -ne $? ]; then
@@ -227,21 +227,21 @@ if [ 0 -ne $? ]; then
 		noBakeErrorMessage+=" with ${overrideComposeFile}"
 	fi
 	noBakeErrorMessage+="!"
-	errorline "$noBakeErrorMessage"
+	logError "$noBakeErrorMessage"
 	exit 3
 fi
 
 # Remove all build contexts and profiles from the baked configuration
-logline "Removing build contexts and service profiles from the baked Docker Compose configuration file..."
+logLine "Removing build contexts and service profiles from the baked Docker Compose configuration file..."
 yaml-set --nostdin --delete --change='services.*.build' "$bakedComposeFile" 2>/dev/null
 yaml-set --nostdin --delete --change='services.*.profiles' "$bakedComposeFile" 2>/dev/null
 
 # Deploy to each host
 for deployToHost in "${_deployToHosts[@]}"; do
-	infoline "Deploying to ${deployToHost}..."
+	logInfo "Deploying to ${deployToHost}..."
 
 	# Ensure the destination directory exists and is owned by the Docker group
-	logline "Ensuring the remote deployment directory exists..."
+	logLine "Ensuring the remote deployment directory exists..."
 	silentSsh "${deployToHost}" <<-EOC
 		if [ -d "${_destinationDir}" ]; then
 			cd "$_destinationDir"
@@ -277,15 +277,15 @@ for deployToHost in "${_deployToHosts[@]}"; do
 		exit \$?
 EOC
 	if [ 0 -ne $? ]; then
-		errorline "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
+		logError "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
 		exit 2
 	fi
 
 	# Copy the virtual filesystem to the remote host
-	logline "Copying files to ${deployToHost}..."
+	logLine "Copying files to ${deployToHost}..."
 	scp -r "$virtualRootDir"/* "${deployToHost}":${_destinationDir}/
 	if [ 0 -ne $? ]; then
-		errorline "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
+		logError "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
 		exit 3
 	fi
 
@@ -297,7 +297,7 @@ EOC
 		logText+=" but leaving the service stack DOWN (be sure to run ${_destinationDir}/start.sh)"
 	fi
 	logText+="..."
-	logline "$logText"
+	logLine "$logText"
 	silentSsh "${deployToHost}" <<-EOC
 		chgrp -R ${_dockerGroup} "${_destinationDir}" && \
 			find "${_destinationDir}" -type d -exec chmod 0770 {} \; && \
@@ -318,7 +318,7 @@ EOC
 			logText+=" or start the service stack"
 		fi
 		logText+="!"
-		errorline "$logText"
+		logError "$logText"
 		exit 4
 	fi
 
@@ -333,10 +333,10 @@ EOC
 		shortFileName=$(basename "$imageFile")
 		destinationFile="${_destinationDir}/${shortFileName}"
 
-		logline "Copying ${imageFile} to ${deployToHost}..."
+		logLine "Copying ${imageFile} to ${deployToHost}..."
 		scp "$imageFile" "${deployToHost}":${_destinationDir}/
 
-		logline "Registering ${imageName} on ${deployToHost}..."
+		logLine "Registering ${imageName} on ${deployToHost}..."
 		silentSsh "${deployToHost}" <<-EOR
 			docker load -i ${destinationFile} \
 				&& docker image tag ${imageID} ${imageName}:latest \
@@ -344,7 +344,7 @@ EOC
 			exit $?
 EOR
 		if [ 0 -ne $? ]; then
-			errorline "Failed to register ${destinationFile} on ${deployToHost}!" >&2
+			logError "Failed to register ${destinationFile} on ${deployToHost}!" >&2
 			exit 5
 		fi
 	done < <(tr \\t \\a <"$imageIDFile")

@@ -45,7 +45,7 @@ cd "${PROJECT_DIRECTORY}"
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
-	errorline "Failed to import shell helpers!" >&2
+	logError "Failed to import shell helpers!" >&2
 	exit 2
 fi
 
@@ -62,7 +62,7 @@ while [ $# -gt 0 ]; do
 
 		-d|--stage)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				if [[ "$2" =~ ^[Dd] ]]; then
@@ -77,7 +77,7 @@ while [ $# -gt 0 ]; do
 				elif [[ "$2" =~ ^[Pp] ]]; then
 					_deployStage=$DEPLOY_STAGE_PRODUCTION
 				else
-					errorline "Unsupported value, ${2}, for $1 option."
+					logError "Unsupported value, ${2}, for $1 option."
 					_hasErrors=true
 				fi
 				shift
@@ -112,7 +112,7 @@ EOHELP
 			;;
 
 		-v|--version)
-			logline "$0 ${MY_VERSION}"
+			logLine "$0 ${MY_VERSION}"
 			exit 0
 			;;
 
@@ -127,7 +127,7 @@ EOHELP
 			;;
 
 		-*)
-			errorline "Unknown option:  $1"
+			logError "Unknown option:  $1"
 			_hasErrors=true
 			;;
 
@@ -141,13 +141,13 @@ done
 
 # Verify Docker is running
 if ! docker info >/dev/null 2>&1; then
-	errorline "Docker is not running!"
+	logError "Docker is not running!"
 	_hasErrors=true
 fi
 
 # Verify Docker Compose is installed
 if ! docker compose --version >/dev/null 2>&1; then
-	errorline "Docker Compose is not installed!"
+	logError "Docker Compose is not installed!"
 	_hasErrors=true
 fi
 
@@ -155,7 +155,7 @@ fi
 # or not for the current run mode.
 bakedComposeFile=
 if isBakedComposeFile "$COMPOSE_BASE_FILE" "$_deployStage"; then
-	logline "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
+	logLine "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
 	bakedComposeFile="$COMPOSE_BASE_FILE"
 else
 	# Identify the Docker Compose override file to use
@@ -178,10 +178,10 @@ else
 			noBakeErrorMessage+=" with ${overrideComposeFile}"
 		fi
 		noBakeErrorMessage+="!"
-		errorline "$noBakeErrorMessage"
+		logError "$noBakeErrorMessage"
 	else
 		# Remove all build contexts from the baked configuration
-		infoline "Removing build contexts from the baked Docker Compose configuration file..."
+		logInfo "Removing build contexts from the baked Docker Compose configuration file..."
 		yaml-set --nostdin --delete --change='**.build' "$bakedComposeFile" 2>/dev/null
 	fi
 fi
@@ -204,7 +204,7 @@ if $_cleanResources; then
 		volumeMode="--volumes"
 		volumeComment=" (DESTROYING data volumes)"
 	fi
-	infoline "Cleaning the Docker environment ${volumeComment}..."
+	logInfo "Cleaning the Docker environment ${volumeComment}..."
 	dockerCompose "$bakedComposeFile" "" \
 		--profile "$_deployStage" \
 		down \
@@ -212,7 +212,7 @@ if $_cleanResources; then
 		--rmi all \
 		$volumeMode
 	if [ 0 -ne $? ]; then
-		errorline "Failed to clean the Docker environment." >&2
+		logError "Failed to clean the Docker environment." >&2
 		exit 2
 	fi
 else
@@ -226,10 +226,10 @@ fi
 # Run the post-stop script, if it exists
 stopPostScript="${PROJECT_DIRECTORY}/stop-post.sh"
 if [ -f "$stopPostScript" ] && [ -x "$stopPostScript" ]; then
-	infoline "Running discovered stop-post.sh script..."
+	logInfo "Running discovered stop-post.sh script..."
 	if ! "$stopPostScript" "$_deployStage" "$bakedComposeFile"
 	then
-		warnline "Post-stop script, ${stopPostScript}, failed!"
+		logWarning "Post-stop script, ${stopPostScript}, failed!"
 	fi
 fi
 
@@ -238,14 +238,14 @@ if $_cleanResources; then
 	statusLine+=" and all resources have been cleaned up"
 fi
 statusLine+="."
-logline "$statusLine"
+logLine "$statusLine"
 
 if $_cleanResources; then
-	logline "To rebuild and start the environment again, run:"
-	logline "    ./build.sh --stage ${_deployStage} --start"
+	logLine "To rebuild and start the environment again, run:"
+	logLine "    ./build.sh --stage ${_deployStage} --start"
 else
-	logline "To start the environment again, run:"
-	logline "    ./start.sh --stage ${_deployStage}"
+	logLine "To start the environment again, run:"
+	logLine "    ./start.sh --stage ${_deployStage}"
 fi
 
 exit $commandResult

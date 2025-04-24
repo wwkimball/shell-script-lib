@@ -71,7 +71,7 @@ while [ $# -gt 0 ]; do
 	case $1 in
 		-d|--stage)
 			if [ -z "$2" ]; then
-				errorline "Missing value for $1 option!"
+				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
 				if [[ "$2" =~ ^[Dd] ]]; then
@@ -86,7 +86,7 @@ while [ $# -gt 0 ]; do
 				elif [[ "$2" =~ ^[Pp] ]]; then
 					_deployStage=$DEPLOY_STAGE_PRODUCTION
 				else
-					errorline "Unsupported value, ${2}, for $1 option."
+					logError "Unsupported value, ${2}, for $1 option."
 					_hasErrors=true
 				fi
 				shift
@@ -123,7 +123,7 @@ EOHELP
 			;;
 
 		-v|--version)
-			logline "$0 ${MY_VERSION}"
+			logLine "$0 ${MY_VERSION}"
 			exit 0
 			;;
 
@@ -133,7 +133,7 @@ EOHELP
 			;;
 
 		-*)
-			errorline "Unknown option:  $1"
+			logError "Unknown option:  $1"
 			_hasErrors=true
 			;;
 
@@ -147,19 +147,19 @@ done
 
 # Verify Docker is running
 if ! docker info >/dev/null 2>&1; then
-	errorline "Docker is not running!"
+	logError "Docker is not running!"
 	_hasErrors=true
 fi
 
 # Verify Docker Compose is installed
 if ! docker compose --version >/dev/null 2>&1; then
-	errorline "Docker Compose is not installed!"
+	logError "Docker Compose is not installed!"
 	_hasErrors=true
 fi
 
 # yamlpath (and Python 3) is required to parse various files
 if ! yaml-get --version >/dev/null 2>&1; then
-	errorline "yamlpath (https://github.com/wwkimball/yamlpath?tab=readme-ov-file#installing) is not installed!"
+	logError "yamlpath (https://github.com/wwkimball/yamlpath?tab=readme-ov-file#installing) is not installed!"
 	_hasErrors=true
 fi
 
@@ -167,7 +167,7 @@ fi
 # or not for the current run mode.
 bakedComposeFile=
 if isBakedComposeFile "$COMPOSE_BASE_FILE" "$_deployStage"; then
-	logline "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
+	logLine "Using ${COMPOSE_BASE_FILE} as a pre-baked ${_deployStage} configuration."
 	bakedComposeFile="$COMPOSE_BASE_FILE"
 else
 	# Identify the Docker Compose override file to use
@@ -190,10 +190,10 @@ else
 			noBakeErrorMessage+=" with ${overrideComposeFile}"
 		fi
 		noBakeErrorMessage+="!"
-		errorline "$noBakeErrorMessage"
+		logError "$noBakeErrorMessage"
 	else
 		# Remove all build contexts from the baked configuration
-		infoline "Removing build contexts from the baked Docker Compose configuration file..."
+		logInfo "Removing build contexts from the baked Docker Compose configuration file..."
 		yaml-set --nostdin --delete --change='**.build' "$bakedComposeFile" 2>/dev/null
 	fi
 fi
@@ -208,10 +208,10 @@ echo "Starting the ${_deployStage} environment..."
 # Run the pre-start script, if it exists
 startPreScript="${PROJECT_DIRECTORY}/start-pre.sh"
 if [ -f "$startPreScript" ] && [ -x "$startPreScript" ]; then
-	infoline "Running discovered script, ${startPreScript}..."
+	logInfo "Running discovered script, ${startPreScript}..."
 	if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
 	then
-		errorline "Pre-start script, ${startPreScript}, failed!"
+		logError "Pre-start script, ${startPreScript}, failed!"
 		exit 3
 	fi
 fi
@@ -221,25 +221,25 @@ if ! dockerCompose "$bakedComposeFile" "" \
 		--profile "$_deployStage" up --detach \
 		--wait --remove-orphans
 then
-	errorline "Failed to start the environment!"
+	logError "Failed to start the environment!"
 	exit 4
 fi
 
 # Run the post-start script, if it exists
 startPostScript="${PROJECT_DIRECTORY}/start-post.sh"
 if [ -f "$startPostScript" ] && [ -x "$startPostScript" ]; then
-	infoline "Running discovered script, ${startPostScript}..."
+	logInfo "Running discovered script, ${startPostScript}..."
 	if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
 	then
-		warnline "Post-start script, ${startPostScript}, failed!"
+		logWarning "Post-start script, ${startPostScript}, failed!"
 	fi
 fi
 
-logline "\nThe environment is up and running.  To stop it, run:"
-logline "    ./stop.sh --stage ${_deployStage}"
+logLine "\nThe environment is up and running.  To stop it, run:"
+logLine "    ./stop.sh --stage ${_deployStage}"
 
 if $_tailLogs; then
-	infoline "\nTailing the Docker Compose logs.  Press Ctrl+C to stop."
+	logInfo "\nTailing the Docker Compose logs.  Press Ctrl+C to stop."
 	dockerCompose "$bakedComposeFile" "" \
 		logs --follow
 fi

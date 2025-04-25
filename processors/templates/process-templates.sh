@@ -206,14 +206,8 @@ done
 export LOG_LEVEL=$_logLevel
 
 # Check whether the template directory exists, is a directory, and is readable
-if [ ! -d "$_templateDirectory" ] || [ ! -r "$_templateDirectory" ]; then
+if [ ! -d "$_templateDirectory" ]; then
 	logError "The template directory, ${_templateDirectory}, does not exist, is not a directory, or cannot be read by this process!"
-	_hasErrors=true
-fi
-
-# Check whether the template directory is writable
-if [ ! -w "$_templateDirectory" ]; then
-	logError "Files in template directory, ${_templateDirectory}, cannot be written by this process!"
 	_hasErrors=true
 fi
 

@@ -21,7 +21,7 @@
 #   SCRIPT TO PERFORM ANY DOCKER OPERATIONS -- the images and containers will
 #   not yet exist -- AND DO NOT ATTEMPT TO SET ANY ENVIRONMENT VARIABLES YOU
 #   INTEND FOR THIS SCRIPT TO USE (because all such environment variable changes
-#   will discarded once your script ends).
+#   will be discarded once your script ends).
 # - build-post.sh <DEPLOYMENT_STAGE> <BAKED_DOCKER_COMPOSE_FILE>
 #   A script to run after building the Docker image(s).  Such a script is run in
 #   the same context as this script, so it will have a a local copy of the
@@ -136,6 +136,7 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        Indicate which run mode to use.  Must be one of:
          * ${DEPLOY_STAGE_DEVELOPMENT}
          * ${DEPLOY_STAGE_LAB}
+         * ${DEPLOY_STAGE_QA}
          * ${DEPLOY_STAGE_STAGING}
          * ${DEPLOY_STAGE_PRODUCTION}
        The default is ${_deployStage}.  This controls which Docker Compose

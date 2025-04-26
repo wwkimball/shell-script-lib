@@ -87,6 +87,7 @@ Options:
        Indicate which run mode to use.  Must be one of:
          * ${DEPLOY_STAGE_DEVELOPMENT}
          * ${DEPLOY_STAGE_LAB}
+         * ${DEPLOY_STAGE_QA}
          * ${DEPLOY_STAGE_STAGING}
          * ${DEPLOY_STAGE_PRODUCTION}
        The default is ${_deployStage}.  This controls which Docker Compose
@@ -200,13 +201,17 @@ virtualLibDir="${virtualRootDir}/lib"
 virtualDockerDir="${virtualRootDir}/docker"
 mkdir -p "$virtualDockerDir"
 trap "rm -rf ${virtualRootDir}" EXIT
-[ -e "${PROJECT_DIRECTORY}/compose.sh" ] && cp "${PROJECT_DIRECTORY}/compose.sh" "${virtualRootDir}/"
-[ -e "${PROJECT_DIRECTORY}/start.sh" ] && cp "${PROJECT_DIRECTORY}/start.sh" "${virtualRootDir}/"
-[ -e "${PROJECT_DIRECTORY}/stop.sh" ] && cp "${PROJECT_DIRECTORY}/stop.sh" "${virtualRootDir}/"
+cp "${PROJECT_DIRECTORY}/compose.sh" "${virtualRootDir}/" 2>/dev/null
+cp "${PROJECT_DIRECTORY}/{start,start-*}.sh" "${virtualRootDir}/" 2>/dev/null
+cp "${PROJECT_DIRECTORY}/{stop,stop-*}.sh" "${virtualRootDir}/" 2>/dev/null
 cp -r "${PROJECT_DIRECTORY}/lib" "${virtualLibDir}/"
+
+# Allow the user to copy an entire directory en-masse to the remote host
 if [ -d "${PROJECT_DIRECTORY}/deploy.d" ]; then
 	cp -r "${PROJECT_DIRECTORY}/deploy.d/"* "${virtualRootDir}/"
 fi
+
+# Remove all Git tracking files from the virtual filesystem
 find "${virtualRootDir}" -name '.git*' -exec rm -rf {} \;
 
 # Identify the Docker Compose override files to use

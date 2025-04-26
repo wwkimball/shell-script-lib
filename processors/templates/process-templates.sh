@@ -338,5 +338,17 @@ if $_ambiguateEnvironmentVariables; then
 fi
 
 # Process template files
-logVerbose "Processing template files in ${_templateDirectory} with extension ${_templateExtension}..."
-processTemplateFiles "$_templateDirectory" "$_templateExtension" $_forceOverwrite $_preserveTemplateFiles
+for _templateDirectory in "${_templateDirectories[@]}"; do
+	# Check whether the template directory exists and is a directory
+	if [ ! -d "$_templateDirectory" ]; then
+		logError "The template directory, ${_templateDirectory}, does not exist or is not a directory!"
+		_hasErrors=true
+		continue
+	fi
+
+	logVerbose "Processing template files in ${_templateDirectory} with extension ${_templateExtension}..."
+	processTemplateFiles "$_templateDirectory" "$_templateExtension" $_forceOverwrite $_preserveTemplateFiles
+done
+if $_hasErrors; then
+	errorOut 86 "Exiting with errors..."
+fi

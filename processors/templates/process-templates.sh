@@ -66,9 +66,11 @@ _hasErrors=false
 _logLevel=${LOG_LEVEL:-"NORMAL"}
 _preserveTemplateFiles=false
 _templateDirectory=${TEMPLATE_DIRECTORY:-$(pwd)}
+_templateDirectoriesSet=false
 _templateExtension=${TEMPLATE_EXTENSION:-".template"}
 _ucDeploymentStage=''
 declare -a _substitutionVars
+declare -a _templateDirectories
 while [ $# -gt 0 ]; do
 	case $1 in
 		-d|--directory)
@@ -76,7 +78,8 @@ while [ $# -gt 0 ]; do
 				logError "Missing value for $1 option!"
 				_hasErrors=true
 			else
-				_templateDirectory="$2"
+				_templateDirectoriesSet=true
+				_templateDirectories+=("$2")
 				shift
 			fi
 			;;
@@ -111,8 +114,9 @@ other options for more information and additional control mechanisms.
 
 OPTIONS include:
   -d DIRECTORY, --directory DIRECTORY
-       The directory in which the template files are found.  The default value
-       can be set via the TEMPLATE_DIRECTORY environment variable.  Present
+       A directory in which the template files are found.  The default value
+       can be set via the TEMPLATE_DIRECTORY environment variable.  This option
+       may be specified multiple times to process multiple directories.  Present
        default:
        ${_templateDirectory}
   -e EXTENSION, --extension EXTENSION
@@ -205,7 +209,12 @@ done
 # Promote the assigned log level
 export LOG_LEVEL=$_logLevel
 
-# Check whether the template directory exists, is a directory, and is readable
+# Ensure there is at least one template directory
+if ! $_templateDirectoriesSet; then
+	_templateDirectories+=("$_templateDirectory")
+fi
+
+# Check whether the template directory exists and is a directory
 if [ ! -d "$_templateDirectory" ]; then
 	logError "The template directory, ${_templateDirectory}, does not exist, is not a directory, or cannot be read by this process!"
 	_hasErrors=true

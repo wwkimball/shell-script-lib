@@ -143,10 +143,10 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        override file is used based on the presence of the DEPLOY_STAGE string
        within the file name matching the pattern:  docker-compose.*.yaml.  For
        the ${DEPLOY_STAGE_DEVELOPMENT} mode, this setting also implies that the
-       --no-image and --no-push options are set.
+       --no-portable and --no-push options are set.
   -h, --help
        Display this help message and exit.
-  -I, --no-image
+  -I, --no-portable
        Do NOT save portable copies of the new image(s).  The default is to
        save portable copies of the new image(s).  Implied when DEPLOY_STAGE is
        ${DEPLOY_STAGE_DEVELOPMENT}.
@@ -167,7 +167,7 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        start the environment.  Note that some operations will start the
        environment automatically in order to perform their tasks.  In that
        case, setting this option will simply keep the environment running
-       after the operation completes.  Implies --no-image and --no-push.
+       after the operation completes.  Implies --no-portable and --no-push.
   -v, --version
        Display the version of this script and exit.
 
@@ -179,7 +179,7 @@ EOHELP
 			exit 0
 			;;
 
-		-I|--no-image)
+		-I|--no-portable)
 			_makePortable=false
 			;;
 

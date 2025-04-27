@@ -308,14 +308,7 @@ EOC
 	fi
 
 	# Fix permissions on the new files and optionally start the service stack
-	logText="Fixing permissions on ${deployToHost}:${_destinationDir}"
-	if $_startStack; then
-		logText+=" and starting the service stack"
-	else
-		logText+=" but leaving the service stack DOWN (be sure to run ${_destinationDir}/start.sh)"
-	fi
-	logText+="..."
-	logLine "$logText"
+	logLine "Fixing permissions on ${deployToHost}:${_destinationDir}..."
 	silentSsh "${deployToHost}" <<-EOC
 		chgrp -R ${_dockerGroup} "${_destinationDir}" && \
 			find "${_destinationDir}" -type d -exec chmod 0770 {} \; && \
@@ -324,45 +317,48 @@ EOC
 		if [ 0 -ne \$? ]; then
 			exit 1
 		fi
-		if $_startStack; then
-			cd "${_destinationDir}"
-			./start.sh --stage ${_deployStage}
-		fi
-		exit \$?
 EOC
 	if [ 0 -ne $? ]; then
-		logText="Failed to fix permissions on ${deployToHost}:${_destinationDir}"
-		if $_startStack; then
-			logText+=" or start the service stack"
-		fi
-		logText+="!"
-		errorOut 4 "$logText"
+		errorOut 4 "Failed to fix permissions on ${deployToHost}:${_destinationDir}!"
 	fi
 
-	# Everything beyond this point is for deploying images
-	if ! $_deployPortable; then
-		logLine "Portable image deployment is disabled; will use a Docker Registry, instead."
+	# Optionally deploy the Docker image via portable image files
+	if $_deployPortable; then
+		# Copy the image file(s) and register them on the remote host
+		while IFS=$'\a' read -r imageRef imageID imageFile; do
+			imageName=${imageRef%%:*}
+			shortFileName=$(basename "$imageFile")
+			destinationFile="${_destinationDir}/${shortFileName}"
+
+			logLine "Copying portable image ${imageFile} to ${deployToHost}..."
+			scp -o StrictHostKeyChecking=no "$imageFile" "${deployToHost}":${_destinationDir}/
+
+			logLine "Registering ${imageName} on ${deployToHost}..."
+			silentSsh "${deployToHost}" <<-EOR
+				docker load -i ${destinationFile} \
+					&& docker image tag ${imageID} ${imageName}:latest \
+					&& rm -f ${destinationFile}
+				exit $?
+EOR
+			if [ 0 -ne $? ]; then
+				errorOut 5 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
+			fi
+		done < <(tr \\t \\a <"$imageIDFile")
+	fi
+
+	# Optionally start the service stack
+	if ! $_startStack; then
+		logInfo "The service stack on ${deployToHost} WILL NOT be started; use --start if you want it started automatically during deployment."
 		continue
 	fi
 
-	# Copy the image file(s) and register them on the remote host
-	while IFS=$'\a' read -r imageRef imageID imageFile; do
-		imageName=${imageRef%%:*}
-		shortFileName=$(basename "$imageFile")
-		destinationFile="${_destinationDir}/${shortFileName}"
-
-		logLine "Copying portable image ${imageFile} to ${deployToHost}..."
-		scp -o StrictHostKeyChecking=no "$imageFile" "${deployToHost}":${_destinationDir}/
-
-		logLine "Registering ${imageName} on ${deployToHost}..."
-		silentSsh "${deployToHost}" <<-EOR
-			docker load -i ${destinationFile} \
-				&& docker image tag ${imageID} ${imageName}:latest \
-				&& rm -f ${destinationFile}
-			exit $?
-EOR
-		if [ 0 -ne $? ]; then
-			errorOut 5 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
-		fi
-	done < <(tr \\t \\a <"$imageIDFile")
+	logLine "Starting the service stack on ${deployToHost}..."
+	silentSsh "${deployToHost}" <<-EOC
+		cd "${_destinationDir}"
+		./start.sh --stage ${_deployStage}
+		exit \$?
+EOC
+	if [ 0 -ne $? ]; then
+		errorOut 4 "Failed to start the service stack on ${deployToHost}:${_destinationDir}!"
+	fi
 done

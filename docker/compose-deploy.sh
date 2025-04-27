@@ -11,7 +11,7 @@
 # All rights reserved.
 ###############################################################################
 # Constants
-MY_VERSION='2025.04.18-1'
+MY_VERSION='2025.04.27-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../" && pwd)"
 LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"
@@ -34,6 +34,7 @@ if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
 fi
 
 # Process command-line arguments
+_deployAsUser=$(whoami)
 _deployPortable=true
 _deployStage=$DEPLOY_STAGE_DEVELOPMENT
 _deployToHosts=()
@@ -110,6 +111,10 @@ Options:
        ${_destinationDir}
   -s, --start
        Start the service stack after deployment.
+  -u, --user
+       The user to use when deploying to the remote host.  The default is
+	   the current user:
+	   ${_deployAsUser}
   -v, --version
        Display the version number and exit
 
@@ -147,6 +152,14 @@ EOF
 		-s|--start)
 			_startStack=true
 			;;
+
+		-u|--user)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_deployAsUser="$2"
+			fi
 
 		-v|--version)
 			logLine "$MY_VERSION"
@@ -243,6 +256,7 @@ yaml-set --nostdin --delete --change='services.*.profiles' "$bakedComposeFile" 2
 
 # Deploy to each host
 for deployToHost in "${_deployToHosts[@]}"; do
+	deployToHost="${_deployAsUser}@${deployToHost}"
 	logInfo "Deploying to ${deployToHost}..."
 
 	# Ensure the destination directory exists and is owned by the Docker group

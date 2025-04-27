@@ -160,6 +160,8 @@ EOF
 			else
 				_deployAsUser="$2"
 			fi
+			shift
+			;;
 
 		-v|--version)
 			logLine "$MY_VERSION"

@@ -216,14 +216,14 @@ virtualLibDir="${virtualRootDir}/lib"
 virtualDockerDir="${virtualRootDir}/docker"
 mkdir -p "$virtualDockerDir"
 trap "rm -rf ${virtualRootDir}" EXIT
-cp "${PROJECT_DIRECTORY}/compose.sh" "${virtualRootDir}/" 2>/dev/null
-cp "${PROJECT_DIRECTORY}/{start,start-*}.sh" "${virtualRootDir}/" 2>/dev/null
-cp "${PROJECT_DIRECTORY}/{stop,stop-*}.sh" "${virtualRootDir}/" 2>/dev/null
-cp -r "${PROJECT_DIRECTORY}/lib" "${virtualLibDir}/"
+cp "${PROJECT_DIRECTORY}"/compose.sh "${virtualRootDir}/" 2>/dev/null
+cp "${PROJECT_DIRECTORY}"/{start,start-*}.sh "${virtualRootDir}/" 2>/dev/null
+cp "${PROJECT_DIRECTORY}"/{stop,stop-*}.sh "${virtualRootDir}/" 2>/dev/null
+cp -r "${PROJECT_DIRECTORY}"/lib "${virtualLibDir}/"
 
 # Allow the user to copy an entire directory en-masse to the remote host
-if [ -d "${PROJECT_DIRECTORY}/deploy.d" ]; then
-	cp -r "${PROJECT_DIRECTORY}/deploy.d/"* "${virtualRootDir}/"
+if [ -d "${PROJECT_DIRECTORY}"/deploy.d ]; then
+	cp -r "${PROJECT_DIRECTORY}"/deploy.d/* "${virtualRootDir}/"
 fi
 
 # Remove all Git tracking files from the virtual filesystem

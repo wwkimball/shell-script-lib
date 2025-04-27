@@ -22,8 +22,9 @@ readonly DEFAULT_VERSION_DATA_DIR
 # Dynamically load other components of the shell library
 if [ -z "$LIB_DIRECTORY" ]; then
 	MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	LIB_DIRECTORY="${MY_DIRECTORY}/lib"
-	readonly MY_DIRECTORY LIB_DIRECTORY
+	PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../" && pwd)"
+	LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"
+	readonly MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY
 fi
 if ! source "${LIB_DIRECTORY}/logging/set-logger.sh"; then
 	echo "ERROR:  Unable to source ${MY_DIRECTORY}/logging/set-logger.sh" >&2

@@ -552,7 +552,7 @@ for buildService in "${buildServices[@]}"; do
 	rm "$_imagesDirectory"/${dockerFileBaseName}-*.tar.bz
 
 	logInfo "Saving a portable copy of the newest image, ${dockerImageRef}, as ${portableQualifiedFile}..."
-	docker save "$dockerImageRef" | bzip2 >"$portableQualifiedFile"
+	docker image save "$dockerImageRef" | bzip2 >"$portableQualifiedFile"
 	retValCompress=${PIPESTATUS[1]}
 	retValSave=${PIPESTATUS[0]}
 	if [ 0 -ne $retValSave ]; then

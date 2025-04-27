@@ -335,7 +335,7 @@ EOC
 
 			logLine "Registering ${imageName} on ${deployToHost}..."
 			silentSsh "${deployToHost}" <<-EOR
-				docker load -i ${destinationFile} \
+				docker image load -i ${destinationFile} \
 					&& docker image tag ${imageID} ${imageName}:latest \
 					&& rm -f ${destinationFile}
 				exit $?

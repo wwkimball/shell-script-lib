@@ -29,7 +29,7 @@ readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
-	logError "Failed to import shell helpers!" >&2
+	echo "ERROR:  Failed to import shell helpers!" >&2
 	exit 2
 fi
 
@@ -247,8 +247,7 @@ if [ 0 -ne $? ]; then
 		noBakeErrorMessage+=" with ${overrideComposeFile}"
 	fi
 	noBakeErrorMessage+="!"
-	logError "$noBakeErrorMessage"
-	exit 3
+	errorOut 3 "$noBakeErrorMessage"
 fi
 
 # Remove all build contexts and profiles from the baked configuration
@@ -298,16 +297,14 @@ for deployToHost in "${_deployToHosts[@]}"; do
 		exit \$?
 EOC
 	if [ 0 -ne $? ]; then
-		logError "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
-		exit 2
+		errorOut 2 "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
 	fi
 
 	# Copy the virtual filesystem to the remote host
 	logLine "Copying files to ${deployToHost}..."
 	scp -o StrictHostKeyChecking=no -r "$virtualRootDir"/* "${deployToHost}":${_destinationDir}/
 	if [ 0 -ne $? ]; then
-		logError "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
-		exit 3
+		errorOut 3 "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
 	fi
 
 	# Fix permissions on the new files and optionally start the service stack
@@ -339,12 +336,12 @@ EOC
 			logText+=" or start the service stack"
 		fi
 		logText+="!"
-		logError "$logText"
-		exit 4
+		errorOut 4 "$logText"
 	fi
 
 	# Everything beyond this point is for deploying images
 	if ! $_deployPortable; then
+		logLine "Portable image deployment is disabled; will use a Docker Registry, instead."
 		continue
 	fi
 
@@ -354,7 +351,7 @@ EOC
 		shortFileName=$(basename "$imageFile")
 		destinationFile="${_destinationDir}/${shortFileName}"
 
-		logLine "Copying ${imageFile} to ${deployToHost}..."
+		logLine "Copying portable image ${imageFile} to ${deployToHost}..."
 		scp -o StrictHostKeyChecking=no "$imageFile" "${deployToHost}":${_destinationDir}/
 
 		logLine "Registering ${imageName} on ${deployToHost}..."
@@ -365,8 +362,7 @@ EOC
 			exit $?
 EOR
 		if [ 0 -ne $? ]; then
-			logError "Failed to register ${destinationFile} on ${deployToHost}!" >&2
-			exit 5
+			errorOut 5 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
 		fi
 	done < <(tr \\t \\a <"$imageIDFile")
 done

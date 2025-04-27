@@ -13,5 +13,5 @@ function silentSsh {
 	if [ -z "$commands" ]; then
 		commands=`cat`
 	fi
-	ssh -T $connectionString "$commands"
+	ssh -T -o StrictHostKeyChecking=no $connectionString "$commands"
 }

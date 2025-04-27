@@ -288,7 +288,7 @@ EOC
 
 	# Copy the virtual filesystem to the remote host
 	logLine "Copying files to ${deployToHost}..."
-	scp -r "$virtualRootDir"/* "${deployToHost}":${_destinationDir}/
+	scp -o StrictHostKeyChecking=no -r "$virtualRootDir"/* "${deployToHost}":${_destinationDir}/
 	if [ 0 -ne $? ]; then
 		logError "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
 		exit 3
@@ -339,7 +339,7 @@ EOC
 		destinationFile="${_destinationDir}/${shortFileName}"
 
 		logLine "Copying ${imageFile} to ${deployToHost}..."
-		scp "$imageFile" "${deployToHost}":${_destinationDir}/
+		scp -o StrictHostKeyChecking=no "$imageFile" "${deployToHost}":${_destinationDir}/
 
 		logLine "Registering ${imageName} on ${deployToHost}..."
 		silentSsh "${deployToHost}" <<-EOR

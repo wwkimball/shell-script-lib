@@ -221,7 +221,8 @@ cp "${PROJECT_DIRECTORY}"/{start,start-*}.sh "${virtualRootDir}/" 2>/dev/null
 cp "${PROJECT_DIRECTORY}"/{stop,stop-*}.sh "${virtualRootDir}/" 2>/dev/null
 cp -r "${PROJECT_DIRECTORY}"/lib "${virtualLibDir}/"
 
-# Allow the user to copy an entire directory en-masse to the remote host
+# Allow the user to copy an entire directory en-masse to the remote host; this
+# is treated as an overlay to the virtual filesystem.
 if [ -d "${PROJECT_DIRECTORY}"/deploy.d ]; then
 	cp -r "${PROJECT_DIRECTORY}"/deploy.d/* "${virtualRootDir}/"
 fi

@@ -223,8 +223,10 @@ cp -r "${PROJECT_DIRECTORY}"/lib "${virtualLibDir}/"
 
 # Allow the user to copy an entire directory en-masse to the remote host; this
 # is treated as an overlay to the virtual filesystem.
-if [ -d "${PROJECT_DIRECTORY}"/deploy.d ]; then
-	cp -r "${PROJECT_DIRECTORY}"/deploy.d/* "${virtualRootDir}/"
+deployOverlayDir="${PROJECT_DIRECTORY}/deploy.d"
+if [ -d "${deployOverlayDir}" ]; then
+	logInfo "Copying overlay files from ${deployOverlayDir} to ${virtualRootDir}..."
+	cp -r "${deployOverlayDir}"/* "${virtualRootDir}/"
 fi
 
 # Remove all Git tracking files from the virtual filesystem

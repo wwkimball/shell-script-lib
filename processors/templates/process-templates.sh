@@ -248,17 +248,19 @@ fi
 # This is a serious problem because it corrupts the substitution process.  The
 # solution is to detect BASH versions >= 5.0 and to replace the & character with
 # its escaped version, \&.  Because subsitution occurs in a loop, determination
-# of the extra escape is performed, here.
-_escapeAndpersands=false
+# of the extra escape is performed, here.  To be safe, we will also escape all
+# other special characters in the substitution value.  This is done by using the
+# printf command with the %q format specifier.
+_escapeSpecialCharacters=false
 if [[ $BASH_VERSION =~ ^([0-9]+\.[0-9]+).+$ ]]; then
 	bashMajMin=${BASH_REMATCH[1]}
 	if [ 0 -ne $(bc <<< "${bashMajMin} >= 5.0") ]; then
 		# BASH version >= 5.0
-		_escapeAndpersands=true
-		logDebug "BASH version ${BASH_VERSION} detected; escaping & characters in substitution values..."
+		_escapeSpecialCharacters=true
+		logDebug "BASH version ${BASH_VERSION} detected; escaping special characters in substitution values..."
 	else
 		# BASH version < 5.0
-		logDebug "BASH version ${BASH_VERSION} detected; no escaping of & characters in substitution values..."
+		logDebug "BASH version ${BASH_VERSION} detected; not escaping special characters in substitution values..."
 	fi
 fi
 
@@ -309,21 +311,11 @@ function substituteTemplateVariables() {
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
 
-		if $_escapeAndpersands; then
-			# Escape the & character in the substitution value
-			logDebug "Escaping & in substitution value:  ${substituteValue}" >&2
-			#ubstituteValue=${substituteValue//&/\\&}
+		if $_escapeSpecialCharacters; then
 			substituteValue=$(printf "%q" "$substituteValue")
-			logDebug "Escaped & in substitution value:  ${substituteValue}" >&2
 		fi
 
-		# Only perform necessary substitutions
-		logDebug "Substituting '${braceWrappedKey}' with '${substituteValue}' in template:" >&2
-		logDebug "$templateText" >&2
 		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
-
-		logDebug "Substituting '${bareKey}' with '${substituteValue}' in template:" >&2
-		logDebug "$templateText" >&2
 		templateText=${templateText//${bareKey}/${substituteValue}}
 	done
 	echo "$templateText"
@@ -360,12 +352,8 @@ function processTemplateFiles() {
 		fi
 
 		# Perform variable substitution
-		logDebug "Substituting variables in ${templateFile}..."
-		logDebug "... source template text:"
-		logDebug "$templateText"
-		logDebug "... substituting variables..."
 		templateText=$(substituteTemplateVariables "$templateText")
-		logDebug "... interpolated template text:"
+		logDebug "Interpolated template text:"
 		logDebug "$templateText"
 
 		# Write the result to the concrete file and delete the template file

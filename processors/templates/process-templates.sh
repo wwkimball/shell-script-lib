@@ -44,7 +44,7 @@
 set -e
 
 # Constants
-MY_VERSION='2025.04.24-1'
+MY_VERSION='2025.04.28-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIRECTORY="${MY_DIRECTORY}/../../"
 readonly MY_VERSION MY_DIRECTORY LIB_DIRECTORY

@@ -227,14 +227,10 @@ fi
 stopPostScript="${PROJECT_DIRECTORY}/stop-post.sh"
 logLine "Checking for post-stop script, ${stopPostScript}..."
 if [ -f "$stopPostScript" ]; then
-	if [ -x "$stopPostScript" ]; then
-		logInfo "Running discovered stop-post.sh script..."
-		if ! "$stopPostScript" "$_deployStage" "$bakedComposeFile"
-		then
-			logWarning "Post-stop script, ${stopPostScript}, failed!"
-		fi
-	else
-		logWarning "Post-stop script, ${stopPostScript}, is not executable; skipping."
+	logInfo "Running discovered stop-post.sh script..."
+	if ! "$stopPostScript" "$_deployStage" "$bakedComposeFile"
+	then
+		logWarning "Post-stop script, ${stopPostScript}, failed!  Is it executable?"
 	fi
 fi
 

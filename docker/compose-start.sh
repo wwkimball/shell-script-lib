@@ -209,15 +209,10 @@ echo "Starting the ${_deployStage} environment..."
 startPreScript="${PROJECT_DIRECTORY}/start-pre.sh"
 logLine "Checking for pre-start script, ${startPreScript}..."
 if [ -f "$startPreScript" ]; then
-	if [ -x "$startPreScript" ]; then
-		logInfo "Running discovered script, ${startPreScript}..."
-		if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
-		then
-			logError "Pre-start script, ${startPreScript}, failed!"
-			exit 3
-		fi
-	else
-		errorOut 4 "Pre-start script, ${startPreScript}, is not executable!"
+	logInfo "Running discovered script, ${startPreScript}..."
+	if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
+	then
+		errorOut 3 "Pre-start script, ${startPreScript}, failed!  Is it executable?"
 	fi
 fi
 
@@ -233,14 +228,10 @@ fi
 startPostScript="${PROJECT_DIRECTORY}/start-post.sh"
 logLine "Checking for post-start script, ${startPostScript}..."
 if [ -f "$startPostScript" ]; then
-	if [ -x "$startPostScript" ]; then
-		logInfo "Running discovered script, ${startPostScript}..."
-		if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
-		then
-			logWarning "Post-start script, ${startPostScript}, failed!"
-		fi
-	else
-		logWarning "Post-start script, ${startPostScript}, is not executable; skipping."
+	logInfo "Running discovered script, ${startPostScript}..."
+	if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
+	then
+		logWarning "Post-start script, ${startPostScript}, failed!  Is it executable?"
 	fi
 fi
 

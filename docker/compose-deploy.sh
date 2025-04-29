@@ -273,15 +273,9 @@ fi
 deployPreScript="${PROJECT_DIRECTORY}/deploy-pre.sh"
 logLine "Checking for pre-deployment script: ${deployPreScript}..."
 if [ -f "$deployPreScript" ]; then
-	if [ -x "$deployPreScript" ]; then
-		logInfo "Running pre-deployment script: ${deployPreScript}..."
-		if ! "$deployPreScript" "$_deployStage" "$bakedComposeFile"; then
-			errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!" >&2
-		fi
-	else
-		logLine "File listing of the offending script:"
-		ls -l "$deployPreScript"
-		errorOut 5 "Pre-deployment script, ${deployPreScript}, is not executable!"
+	logInfo "Running pre-deployment script: ${deployPreScript}..."
+	if ! "$deployPreScript" "$_deployStage" "$bakedComposeFile"; then
+		errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!  Is it executable?"
 	fi
 fi
 

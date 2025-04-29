@@ -238,6 +238,26 @@ if $_hasErrors; then
 	exit 1
 fi
 
+# Edge Case:  BASH version 5.0 introduced a change in the way that substitutions
+# are performed during variable expansion.  This change causes substitution
+# values containing an & character to be replaced with the matched variable
+# name at the &.  This looks like:
+#  * Template:  "${MY_VARIABLE}"
+#  * Value:  "Hello & World"
+#  * Result:  "Hello ${MY_VARIABLE} World" (not recursively expanded)
+# This is a serious problem because it corrupts the substitution process.  The
+# solution is to detect BASH versions >= 5.0 and to replace the & character with
+# its escaped version, \&.  Because subsitution occurs in a loop, determination
+# of the extra escape is performed, here.
+_escapeAndpersands=false
+if [[ $BASH_VERSION =~ ^([0-9]+)\.([0-9]+) ]]; then
+	bashMaj=${BASH_REMATCH[1]}
+	if [ 0 -ne $(bc <<< "${bashMaj} > 5") ]; then
+		# BASH version >= 5.0
+		_escapeAndpersands=true
+	fi
+fi
+
 # Accept the remaining arguments as environment variable names to be
 # interpolated into the template files.  The variable names are stored in an
 # array for later processing.
@@ -285,17 +305,19 @@ function substituteTemplateVariables() {
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
 
+		if $_escapeAndpersands; then
+			# Escape the & character in the substitution value
+			substituteValue=${substituteValue//&/\\&}
+		fi
+
 		# Only perform necessary substitutions
-		# if [[ "$templateText" == *"$braceWrappedKey"* ]]; then
-			logDebug "Substituting '${braceWrappedKey}' with '${substituteValue}' in template:" >&2
-			logDebug "$templateText" >&2
-			templateText=${templateText//${braceWrappedKey}/${substituteValue}}
-		# fi
-		# if [[ "$templateText" == *"$bareKey"* ]]; then
-			logDebug "Substituting '${bareKey}' with '${substituteValue}' in template:" >&2
-			logDebug "$templateText" >&2
-			templateText=${templateText//${bareKey}/${substituteValue}}
-		# fi
+		logDebug "Substituting '${braceWrappedKey}' with '${substituteValue}' in template:" >&2
+		logDebug "$templateText" >&2
+		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
+
+		logDebug "Substituting '${bareKey}' with '${substituteValue}' in template:" >&2
+		logDebug "$templateText" >&2
+		templateText=${templateText//${bareKey}/${substituteValue}}
 	done
 	echo "$templateText"
 }

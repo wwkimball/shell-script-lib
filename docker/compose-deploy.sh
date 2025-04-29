@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 ###############################################################################
 # Deploy this project to a remote server.
 #

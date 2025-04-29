@@ -5,7 +5,23 @@
 # A pre-baked Docker Compose configuration file is copied to the remote host
 # (obviating the various .env* files).  Portable image files are copied to the
 # remote host and registered with Docker unless the --no-portable option is
-# specified.
+# specified.  An overlay directory, deploy.d, may be used to copy files to the
+# remote host en-masse.
+#
+# Optional external assets:
+# - deploy-pre.sh <DEPLOYMENT_STAGE> <BAKED_DOCKER_COMPOSE_FILE>
+#   A script to run just before deploying the Docker image(s).  Such a script is
+#   run in the same context as this script, so it can manipulate the baked
+#   Docker Compose file before it is used but will have only a local copy
+#   of the environment.  The script file must be in the project directory -- two
+#   directory levels higher than the directory containing this parent script --
+#   and be executable by the user running this script.  It will receive
+#   the deployment stage name and the name of the baked Docker Compose file as
+#   command-line arguments, in that order.  Using this script is optional and
+#   is most useful for making deployment-specific changes to the baked Docker
+#   Compose file.  DO NOT ATTEMPT TO SET ANY ENVIRONMENT VARIABLES YOU INTEND
+#   FOR THIS SCRIPT TO USE (because all such environment variable changes will
+#   be discarded once your script ends).
 #
 # Copyright 2025 William W. Kimball, Jr. MBA MSIS
 # All rights reserved.
@@ -251,6 +267,14 @@ if [ 0 -ne $? ]; then
 	fi
 	noBakeErrorMessage+="!"
 	errorOut 3 "$noBakeErrorMessage"
+fi
+
+# Run deploy-pre.sh when present and executable
+deployPreScript="${PROJECT_DIRECTORY}/deploy-pre.sh"
+if [ -f "$deployPreScript" ] && [ -x "$deployPreScript" ]; then
+	if ! "$deployPreScript" "$_deployStage" "$bakedComposeFile"; then
+		errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!" >&2
+	fi
 fi
 
 # Remove all build contexts and profiles from the baked configuration

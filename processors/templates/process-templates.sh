@@ -255,6 +255,10 @@ if [[ $BASH_VERSION =~ ^([0-9]+)\.([0-9]+) ]]; then
 	if [ 0 -ne $(bc <<< "${bashMaj} > 5") ]; then
 		# BASH version >= 5.0
 		_escapeAndpersands=true
+		logDebug "BASH version ${BASH_VERSION} detected; escaping & characters in substitution values..."
+	else
+		# BASH version < 5.0
+		logDebug "BASH version ${BASH_VERSION} detected; no escaping of & characters in substitution values..."
 	fi
 fi
 
@@ -307,7 +311,9 @@ function substituteTemplateVariables() {
 
 		if $_escapeAndpersands; then
 			# Escape the & character in the substitution value
+			logDebug "Escaping & in substitution value:  ${substituteValue}" >&2
 			substituteValue=${substituteValue//&/\\&}
+			logDebug "Escaped & in substitution value:  ${substituteValue}" >&2
 		fi
 
 		# Only perform necessary substitutions

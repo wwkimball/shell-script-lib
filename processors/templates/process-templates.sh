@@ -285,10 +285,17 @@ function substituteTemplateVariables() {
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
 
-		logDebug "Substituting ${varName} with ${substituteValue}..."
-
-		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
-		templateText=${templateText//${bareKey}/${substituteValue}}
+		# Only perform necessary substitutions
+		# if [[ "$templateText" == *"$braceWrappedKey"* ]]; then
+			logDebug "Substituting '${braceWrappedKey}' with '${substituteValue}' in template:" >&2
+			logDebug "$templateText" >&2
+			templateText=${templateText//${braceWrappedKey}/${substituteValue}}
+		# fi
+		# if [[ "$templateText" == *"$bareKey"* ]]; then
+			logDebug "Substituting '${bareKey}' with '${substituteValue}' in template:" >&2
+			logDebug "$templateText" >&2
+			templateText=${templateText//${bareKey}/${substituteValue}}
+		# fi
 	done
 	echo "$templateText"
 }
@@ -308,18 +315,11 @@ function processTemplateFiles() {
 			errorOut 2 "Unable to read ${templateFile}!"
 		fi
 
+		# Empty templates offer no value
 		if [ -z "$templateText" ]; then
 			logWarning "Template file, ${templateFile}, is empty!"
 			continue
 		fi
-		# Perform variable substitution
-		logDebug "Substituting variables in ${templateFile}..."
-		logDebug "... source template text:"
-		logDebug "$templateText"
-		logDebug "... substituting variables..."
-		templateText=$(substituteTemplateVariables "$templateText")
-		logDebug "... interpolated template text:"
-		logDebug "$templateText"
 
 		# Remove the template extension from the file name
 		concreteFile="${templateFile//${templateExtension}/}"
@@ -329,6 +329,15 @@ function processTemplateFiles() {
 		if [ -e "$concreteFile" ] && ! $forceOverwrite; then
 			errorOut 5 "Concrete file, ${concreteFile}, already exists!  Set --force to overwrite."
 		fi
+
+		# Perform variable substitution
+		logDebug "Substituting variables in ${templateFile}..."
+		logDebug "... source template text:"
+		logDebug "$templateText"
+		logDebug "... substituting variables..."
+		templateText=$(substituteTemplateVariables "$templateText")
+		logDebug "... interpolated template text:"
+		logDebug "$templateText"
 
 		# Write the result to the concrete file and delete the template file
 		logDebug "Saving interpolated template to ${concreteFile}..."

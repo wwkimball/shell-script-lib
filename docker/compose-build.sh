@@ -400,10 +400,15 @@ cd "${PROJECT_DIRECTORY}"
 
 # Run build-pre.sh when present and executable
 buildPreScript="${PROJECT_DIRECTORY}/build-pre.sh"
-if [ -f "$buildPreScript" ] && [ -x "$buildPreScript" ]; then
-	if ! "$buildPreScript" "$_deployStage" "$bakedComposeFile"; then
-		logError "Failed to run pre-build script, ${buildPreScript}!" >&2
-		exit 5
+logLine "Checking for pre-build script, ${buildPreScript}..."
+if [ -f "$buildPreScript" ]; then
+	if [ -x "$buildPreScript" ]; then
+		if ! "$buildPreScript" "$_deployStage" "$bakedComposeFile"; then
+			logError "Failed to run pre-build script, ${buildPreScript}!" >&2
+			exit 5
+		fi
+	else
+		logWarning "Pre-build script, ${buildPreScript}, is not executable; skipping."
 	fi
 fi
 
@@ -577,10 +582,15 @@ done
 
 # Run build-post.sh when present and executable
 buildPostScript="${PROJECT_DIRECTORY}/build-post.sh"
-if [ -f "$buildPostScript" ] && [ -x "$buildPostScript" ]; then
-	if ! "$buildPostScript" "$_deployStage" "$bakedComposeFile"; then
-		logError "Failed to run post-build script!" >&2
-		exit 31
+logLine "Checking for post-build script, ${buildPostScript}..."
+if [ -f "$buildPostScript" ]; then
+	if [ -x "$buildPostScript" ]; then
+		if ! "$buildPostScript" "$_deployStage" "$bakedComposeFile"; then
+			logError "Failed to run post-build script!" >&2
+			exit 31
+		fi
+	else
+		logWarning "Post-build script, ${buildPostScript}, is not executable; skipping."
 	fi
 fi
 

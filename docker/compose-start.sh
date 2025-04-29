@@ -207,12 +207,17 @@ echo "Starting the ${_deployStage} environment..."
 
 # Run the pre-start script, if it exists
 startPreScript="${PROJECT_DIRECTORY}/start-pre.sh"
-if [ -f "$startPreScript" ] && [ -x "$startPreScript" ]; then
-	logInfo "Running discovered script, ${startPreScript}..."
-	if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
-	then
-		logError "Pre-start script, ${startPreScript}, failed!"
-		exit 3
+logLine "Checking for pre-start script, ${startPreScript}..."
+if [ -f "$startPreScript" ]; then
+	if [ -x "$startPreScript" ]; then
+		logInfo "Running discovered script, ${startPreScript}..."
+		if ! "$startPreScript" "$_deployStage" "$bakedComposeFile"
+		then
+			logError "Pre-start script, ${startPreScript}, failed!"
+			exit 3
+		fi
+	else
+		errorOut 4 "Pre-start script, ${startPreScript}, is not executable!"
 	fi
 fi
 
@@ -221,17 +226,21 @@ if ! dockerCompose "$bakedComposeFile" "" \
 		--profile "$_deployStage" up --detach \
 		--wait --remove-orphans
 then
-	logError "Failed to start the environment!"
-	exit 4
+	errorOut 5 "Failed to start the environment!"
 fi
 
 # Run the post-start script, if it exists
 startPostScript="${PROJECT_DIRECTORY}/start-post.sh"
-if [ -f "$startPostScript" ] && [ -x "$startPostScript" ]; then
-	logInfo "Running discovered script, ${startPostScript}..."
-	if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
-	then
-		logWarning "Post-start script, ${startPostScript}, failed!"
+logLine "Checking for post-start script, ${startPostScript}..."
+if [ -f "$startPostScript" ]; then
+	if [ -x "$startPostScript" ]; then
+		logInfo "Running discovered script, ${startPostScript}..."
+		if ! "$startPostScript" "$_deployStage" "$bakedComposeFile"
+		then
+			logWarning "Post-start script, ${startPostScript}, failed!"
+		fi
+	else
+		logWarning "Post-start script, ${startPostScript}, is not executable; skipping."
 	fi
 fi
 

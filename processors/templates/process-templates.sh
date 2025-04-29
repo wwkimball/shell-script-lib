@@ -248,19 +248,17 @@ fi
 # This is a serious problem because it corrupts the substitution process.  The
 # solution is to detect BASH versions >= 5.0 and to replace the & character with
 # its escaped version, \&.  Because subsitution occurs in a loop, determination
-# of the extra escape is performed, here.  To be safe, we will also escape all
-# other special characters in the substitution value.  This is done by using the
-# printf command with the %q format specifier.
-_escapeSpecialCharacters=false
+# of the extra escape is performed, here.
+_escapeAndpersands=false
 if [[ $BASH_VERSION =~ ^([0-9]+\.[0-9]+).+$ ]]; then
 	bashMajMin=${BASH_REMATCH[1]}
 	if [ 0 -ne $(bc <<< "${bashMajMin} >= 5.0") ]; then
 		# BASH version >= 5.0
-		_escapeSpecialCharacters=true
-		logDebug "BASH version ${BASH_VERSION} detected; escaping special characters in substitution values..."
+		_escapeAndpersands=true
+		logDebug "BASH version ${BASH_VERSION} detected; escaping & characters in substitution values..."
 	else
 		# BASH version < 5.0
-		logDebug "BASH version ${BASH_VERSION} detected; not escaping special characters in substitution values..."
+		logDebug "BASH version ${BASH_VERSION} detected; no escaping of & characters in substitution values..."
 	fi
 fi
 
@@ -311,10 +309,12 @@ function substituteTemplateVariables() {
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
 
-		if $_escapeSpecialCharacters; then
-			substituteValue=$(printf "%q" "$substituteValue")
+		if $_escapeAndpersands; then
+			# Escape the & character in the substitution value
+			substituteValue=${substituteValue//&/\\&}
 		fi
 
+		# Only perform necessary substitutions
 		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
 		templateText=${templateText//${bareKey}/${substituteValue}}
 	done

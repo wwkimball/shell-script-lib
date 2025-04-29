@@ -279,6 +279,8 @@ if [ -f "$deployPreScript" ]; then
 			errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!" >&2
 		fi
 	else
+		logLine "File listing of the offending script:"
+		ls -l "$deployPreScript"
 		errorOut 5 "Pre-deployment script, ${deployPreScript}, is not executable!"
 	fi
 fi

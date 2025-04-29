@@ -272,6 +272,7 @@ fi
 # Run deploy-pre.sh when present and executable
 deployPreScript="${PROJECT_DIRECTORY}/deploy-pre.sh"
 if [ -f "$deployPreScript" ] && [ -x "$deployPreScript" ]; then
+	logInfo "Running pre-deployment script: ${deployPreScript}..."
 	if ! "$deployPreScript" "$_deployStage" "$bakedComposeFile"; then
 		errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!" >&2
 	fi

@@ -309,21 +309,21 @@ function substituteTemplateVariables() {
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
 
-		if $_escapeAndpersands; then
-			# Escape the & character in the substitution value
-			logDebug "Escaping & in substitution value:  ${substituteValue}" >&2
-			substituteValue=${substituteValue//&/\\&}
-			logDebug "Escaped & in substitution value:  ${substituteValue}" >&2
-		fi
+		# if $_escapeAndpersands; then
+		# 	# Escape the & character in the substitution value
+		# 	logDebug "Escaping & in substitution value:  ${substituteValue}" >&2
+		# 	substituteValue=${substituteValue//&/\\&}
+		# 	logDebug "Escaped & in substitution value:  ${substituteValue}" >&2
+		# fi
 
 		# Only perform necessary substitutions
 		logDebug "Substituting '${braceWrappedKey}' with '${substituteValue}' in template:" >&2
 		logDebug "$templateText" >&2
-		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
+		templateText=${templateText//${braceWrappedKey}/${substituteValue@Q}}
 
 		logDebug "Substituting '${bareKey}' with '${substituteValue}' in template:" >&2
 		logDebug "$templateText" >&2
-		templateText=${templateText//${bareKey}/${substituteValue}}
+		templateText=${templateText//${bareKey}/${substituteValue@Q}}
 	done
 	echo "$templateText"
 }

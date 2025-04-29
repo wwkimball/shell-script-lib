@@ -27,7 +27,7 @@
 # All rights reserved.
 ###############################################################################
 # Constants
-MY_VERSION='2025.04.27-1'
+MY_VERSION='2025.04.29-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../" && pwd)"
 LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"

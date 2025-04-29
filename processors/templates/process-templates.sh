@@ -284,6 +284,9 @@ function substituteTemplateVariables() {
 		braceWrappedKey="\$\{${varName}\}"
 		bareKey="\$${varName}"
 		substituteValue="${!varName}"
+
+		logDebug "Substituting ${varName} with ${substituteValue}..."
+
 		templateText=${templateText//${braceWrappedKey}/${substituteValue}}
 		templateText=${templateText//${bareKey}/${substituteValue}}
 	done
@@ -305,8 +308,18 @@ function processTemplateFiles() {
 			errorOut 2 "Unable to read ${templateFile}!"
 		fi
 
+		if [ -z "$templateText" ]; then
+			logWarning "Template file, ${templateFile}, is empty!"
+			continue
+		fi
 		# Perform variable substitution
+		logDebug "Substituting variables in ${templateFile}..."
+		logDebug "... source template text:"
+		logDebug "$templateText"
+		logDebug "... substituting variables..."
 		templateText=$(substituteTemplateVariables "$templateText")
+		logDebug "... interpolated template text:"
+		logDebug "$templateText"
 
 		# Remove the template extension from the file name
 		concreteFile="${templateFile//${templateExtension}/}"

@@ -279,7 +279,7 @@ if [ -f "$deployPreScript" ]; then
 			errorOut 4 "Failed to run deploy-pre.sh script, ${deployPreScript}!" >&2
 		fi
 	else
-		logWarning "Pre-deployment script, ${deployPreScript}, is not executable; skipping."
+		errorOut 5 "Pre-deployment script, ${deployPreScript}, is not executable; skipping."
 	fi
 fi
 
@@ -330,14 +330,14 @@ for deployToHost in "${_deployToHosts[@]}"; do
 		exit \$?
 EOC
 	if [ 0 -ne $? ]; then
-		errorOut 2 "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
+		errorOut 6 "Deployment to ${_destinationDir} failed on ${deployToHost}!" >&2
 	fi
 
 	# Copy the virtual filesystem to the remote host
 	logLine "Copying files to ${deployToHost}..."
 	scp -o StrictHostKeyChecking=no -r "$virtualRootDir"/* "${deployToHost}":${_destinationDir}/
 	if [ 0 -ne $? ]; then
-		errorOut 3 "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
+		errorOut 7 "Failed to copy source files to ${deployToHost}:${_destinationDir}" >&2
 	fi
 
 	# Fix permissions on the new files and optionally start the service stack
@@ -352,7 +352,7 @@ EOC
 		fi
 EOC
 	if [ 0 -ne $? ]; then
-		errorOut 4 "Failed to fix permissions on ${deployToHost}:${_destinationDir}!"
+		errorOut 8 "Failed to fix permissions on ${deployToHost}:${_destinationDir}!"
 	fi
 
 	# Optionally deploy the Docker image via portable image files
@@ -374,7 +374,7 @@ EOC
 				exit $?
 EOR
 			if [ 0 -ne $? ]; then
-				errorOut 5 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
+				errorOut 9 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
 			fi
 		done < <(tr \\t \\a <"$imageIDFile")
 	fi
@@ -392,6 +392,6 @@ EOR
 		exit \$?
 EOC
 	if [ 0 -ne $? ]; then
-		errorOut 4 "Failed to start the service stack on ${deployToHost}:${_destinationDir}!"
+		errorOut 10 "Failed to start the service stack on ${deployToHost}:${_destinationDir}!"
 	fi
 done

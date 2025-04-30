@@ -45,7 +45,7 @@ cd "${PROJECT_DIRECTORY}"
 
 # Import the shell helpers
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
-	logError "Failed to import shell helpers!" >&2
+	echo "Failed to import shell helpers!" >&2
 	exit 2
 fi
 
@@ -191,9 +191,7 @@ if $_hasErrors; then
 	exit 1
 fi
 
-echo "Stopping the ${_deployStage} environment..."
-
-echo
+logLine "Stopping the ${_deployStage} environment..."
 
 # On request, clean the Docker environment
 commandResult=0

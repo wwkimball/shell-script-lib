@@ -124,13 +124,13 @@ done
 
 # Verify Docker is running
 if ! docker info >/dev/null 2>&1; then
-	echo "ERROR:  Docker is not running!" >&2
+	logError "Docker is not running!" >&2
 	_hasErrors=true
 fi
 
 # Verify Docker Compose is installed
 if ! docker compose --version >/dev/null 2>&1; then
-	echo "ERROR:  Docker Compose is not installed!" >&2
+	logError "Docker Compose is not installed!" >&2
 	_hasErrors=true
 fi
 

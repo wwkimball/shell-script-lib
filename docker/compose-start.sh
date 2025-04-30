@@ -203,7 +203,7 @@ if $_hasErrors; then
 	exit 1
 fi
 
-echo "Starting the ${_deployStage} environment..."
+logLine "Starting the ${_deployStage} environment..."
 
 # Run the pre-start script, if it exists
 startPreScript="${PROJECT_DIRECTORY}/start-pre.sh"

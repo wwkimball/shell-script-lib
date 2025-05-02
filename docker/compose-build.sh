@@ -74,6 +74,7 @@ _hasErrors=false
 _imagesDirectory="${DOCKER_DIRECTORY}/images"
 _imageVersionFile="${PROJECT_DIRECTORY}/VERSION"
 _makePortable=true
+_progressMode=auto
 _pushImages=true
 _saveBakedFile=false
 _servicesRunning=false
@@ -153,6 +154,10 @@ Builds the Docker image(s) for this project.  OPTIONS include:
   -i IMAGE_DIR, --images IMAGE_DIR
        The directory to save portable copies of the new image to.  Defaults to
        ${_imagesDirectory}.
+  -p PROGRESS_MODE, --progress PROGRESS_MODE
+       The Docker Compose progress mode to use while building the docker
+       image(s).  The default is ${_progressMode}.  Refer to the Docker Compose
+       documentation for the available options.
   -P, --no-push
        Do NOT push the new image(s) to the Docker registry.  The default is
        to push the new image(s) to the registry.  Implied when DEPLOY_STAGE is
@@ -189,6 +194,16 @@ EOHELP
 				_hasErrors=true
 			else
 				_imagesDirectory="$2"
+				shift
+			fi
+			;;
+
+		-p|--progress)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_progressMode="$2"
 				shift
 			fi
 			;;
@@ -453,6 +468,7 @@ for buildService in "${buildServices[@]}"; do
 	logInfo "Building version ${dockerImageVersion} of ${dockerImageBaseName} for ${buildService}..."
 	if ! dockerCompose "$bakedComposeFile" "" \
 		--profile "$_deployStage" \
+		--progress "$_progressMode" \
 		build --pull ${buildService}
 	then
 		logError "Docker build failed!" >&2

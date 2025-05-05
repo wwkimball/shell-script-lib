@@ -154,14 +154,14 @@ Builds the Docker image(s) for this project.  OPTIONS include:
   -i IMAGE_DIR, --images IMAGE_DIR
        The directory to save portable copies of the new image to.  Defaults to
        ${_imagesDirectory}.
-  -p PROGRESS_MODE, --progress PROGRESS_MODE
-       The Docker Compose progress mode to use while building the docker
-       image(s).  The default is ${_progressMode}.  Refer to the Docker Compose
-       documentation for the available options.
   -P, --no-push
        Do NOT push the new image(s) to the Docker registry.  The default is
        to push the new image(s) to the registry.  Implied when DEPLOY_STAGE is
        ${DEPLOY_STAGE_DEVELOPMENT}.
+  -p PROGRESS_MODE, --progress PROGRESS_MODE
+       The Docker Compose progress mode to use while building the docker
+       image(s).  The default is ${_progressMode}.  Refer to the Docker Compose
+       documentation for the available options.
   -r VERSION_FILE, --version-file VERSION_FILE
        The file containing the base version number.  A version file is required
        in order to properly version and build-tag Docker images via this script.
@@ -304,14 +304,12 @@ if $_saveBakedFile; then
 	bakedComposeFile="${_bakedDir}/docker-compose.${_deployStage}.baked.yaml"
 	if [ ! -d "$_bakedDir" ]; then
 		if ! mkdir -p "$_bakedDir"; then
-			logError "Unable to create ${_bakedDir}!" >&2
-			exit 2
+			errorOut 2 "Unable to create ${_bakedDir}!"
 		fi
 	fi
 	if [ -e "$bakedComposeFile" ]; then
 		if ! rm -f "$bakedComposeFile"; then
-			logError "Unable to remove ${bakedComposeFile}!" >&2
-			exit 4
+			errorOut 3 "Unable to remove ${bakedComposeFile}!"
 		fi
 	fi
 else
@@ -369,8 +367,7 @@ if $_cleanResources; then
 		--profile "$_deployStage" \
 		down --remove-orphans --rmi all --volumes
 	if [ 0 -ne $? ]; then
-		logError "Failed to clean the Docker environment." >&2
-		exit 2
+		errorOut 4 "Failed to clean the Docker environment."
 	fi
 else
 	# Stop any running containers
@@ -379,8 +376,7 @@ else
 		--profile "$_deployStage" \
 		stop
 	if [ 0 -ne $? ]; then
-		logError "Failed to stop any running containers." >&2
-		exit 2
+		errorOut 5 "Failed to stop any running containers."
 	fi
 fi
 
@@ -389,8 +385,7 @@ dockerCompose "$bakedComposeFile" "" \
 	--profile "$_deployStage" \
 	pull --ignore-buildable
 if [ 0 -ne $? ]; then
-	logError "Failed to pull the latest Docker images." >&2
-	exit 2
+	errorOut 6 "Failed to pull the latest Docker images."
 fi
 
 # When exporting portable images, ensure the target directory exists
@@ -418,7 +413,7 @@ buildPreScript="${PROJECT_DIRECTORY}/build-pre.sh"
 logLine "Checking for pre-build script, ${buildPreScript}..."
 if [ -f "$buildPreScript" ]; then
 	if ! "$buildPreScript" "$_deployStage" "$bakedComposeFile"; then
-		errorOut 5 "Failed to run pre-build script, ${buildPreScript}!  Is it executable?"
+		errorOut 7 "Failed to run pre-build script, ${buildPreScript}!  Is it executable?"
 	fi
 fi
 
@@ -432,9 +427,7 @@ for buildService in "${buildServices[@]}"; do
 			missingImageNameMessage+=" and ${overrideComposeFile}"
 		fi
 		missingImageNameMessage+="!"
-		logError "$missingImageNameMessage"
-		unset missingImageNameMessage
-		exit 20
+		errorOut 8 "$missingImageNameMessage"
 	fi
 	longDockerImageName=${imageComposeName%:*}				# Strip version
 	dockerImageVersionedName=${imageComposeName#*/}			# Strip registry, keep user
@@ -445,8 +438,7 @@ for buildService in "${buildServices[@]}"; do
 	# Identify the next available build number for each service's artifact
 	buildNumber=$(getReleaseNumberForVersion "$dockerImageBaseName" "$baseVersion")
 	if [ 0 -ne $? ]; then
-		logError "Could not determine the build number for ${dockerImageBaseName}!"
-		exit 21
+		errorOut 9 "Could not determine the build number for ${dockerImageBaseName}!"
 	fi
 	dockerImageVersion="${baseVersion}-${buildNumber}"
 
@@ -459,8 +451,7 @@ for buildService in "${buildServices[@]}"; do
 	logLine "Setting image to ${dockerImageRef} at ${imageNameYAMLPath} in ${bakedComposeFile}..."
 	yaml-set --nostdin --change="$imageNameYAMLPath" --value="$dockerImageRef" "$bakedComposeFile"
 	if [ 0 -ne $? ]; then
-		logError "Unable to update image in ${bakedComposeFile} to ${dockerImageRef}!" >&2
-		exit 22
+		errorOut 10 "Unable to update image in ${bakedComposeFile} to ${dockerImageRef}!"
 	fi
 
 	# Perform the actual build
@@ -471,8 +462,7 @@ for buildService in "${buildServices[@]}"; do
 		--progress "$_progressMode" \
 		build --pull ${buildService}
 	then
-		logError "Docker build failed!" >&2
-		exit 23
+		errorOut 11 "Docker build failed!"
 	fi
 
 	# Run build-post-<service>.sh within the container when present
@@ -485,16 +475,14 @@ for buildService in "${buildServices[@]}"; do
 			--profile "$_deployStage" \
 			up --detach ${buildService}
 		then
-			logError "Failed to start the ${buildService} container!" >&2
-			exit 23
+			errorOut 12 "Failed to start the ${buildService} container!"
 		fi
 		_servicesRunning=true
 		cat "$buildPostServiceScript" | dockerCompose "$bakedComposeFile" "" \
 			--profile "$_deployStage" \
 			exec ${buildService} /bin/bash -s
 		if [ 0 -ne $? ]; then
-			logError "Failed to run the post-build script, ${buildPostServiceScript}, in the ${buildService} container!" >&2
-			exit 24
+			errorOut 13 "Failed to run the post-build script, ${buildPostServiceScript}, in the ${buildService} container!"
 		fi
 	fi
 
@@ -505,8 +493,7 @@ for buildService in "${buildServices[@]}"; do
 	logLine "Tagging the new image as latest..."
 	docker image tag "${dockerImageRef}" "${longDockerImageName}:latest"
 	if [ 0 -ne $? ]; then
-		logError "Could not tag the new image as latest!" >&2
-		exit 25
+		errorOut 14 "Could not tag the new image as latest!"
 	fi
 
 	# Delete all old versions of the new image
@@ -533,15 +520,13 @@ for buildService in "${buildServices[@]}"; do
 			--profile "$_deployStage" \
 			push ${buildService}
 		if [ 0 -ne $? ]; then
-			logError "Could not push the new versioned image to the registry!" >&2
-			exit 26
+			errorOut 15 "Could not push the new versioned image to the registry!"
 		fi
 
 		logLine "Pushing tag, latest, to the registry for the new image..."
 		docker push "${longDockerImageName}:latest"
 		if [ 0 -ne $? ]; then
-			logError "Could not push the 'latest' image to the registry!" >&2
-			exit 27
+			errorOut 16 "Could not push the 'latest' image to the registry!"
 		fi
 	else
 		logLine "Skipping push of the new image to the registry."
@@ -558,8 +543,7 @@ for buildService in "${buildServices[@]}"; do
 	# Track the ID of the new image for deployment
 	savedImageID=$(docker images --format="{{.ID}}" ${dockerImageRef})
 	if [ 0 -ne $? ]; then
-		logError "Could not determine the ID of the new image!" >&2
-		exit 28
+		errorOut 17 "Could not determine the ID of the new image!"
 	fi
 	echo -e "${dockerImageBaseName}:${dockerImageVersion}\t${savedImageID}\t${portableQualifiedFile}" >>"$imageIDFile"
 
@@ -572,11 +556,9 @@ for buildService in "${buildServices[@]}"; do
 	retValCompress=${PIPESTATUS[1]}
 	retValSave=${PIPESTATUS[0]}
 	if [ 0 -ne $retValSave ]; then
-		logError "Could not save the new image; got exit code, ${retValSave}!" >&2
-		exit 29
+		errorOut 18 "Could not save the new image; got exit code, ${retValSave}!"
 	elif [ 0 -ne $retValCompress ]; then
-		logError "Could not compress the new image; got exit code, ${retValCompress}!" >&2
-		exit 30
+		errorOut 19 "Could not compress the new image; got exit code, ${retValCompress}!"
 	fi
 
 	cat <<EOF
@@ -605,8 +587,7 @@ if $_servicesRunning; then
 		# Stop the environment
 		./stop.sh --stage "$_deployStage"
 		if [ 0 -ne $? ]; then
-			logError "Failed to stop the environment!" >&2
-			exit 33
+			errorOut 20 "Failed to stop the environment!"
 		fi
 		_servicesRunning=false
 	fi
@@ -615,8 +596,7 @@ else
 		# Bring up the environment and wait for the primary service to be ready
 		./start.sh --stage "$_deployStage"
 		if [ 0 -ne $? ]; then
-			logError "Failed to start the environment!" >&2
-			exit 34
+			errorOut 21 "Failed to start the environment!"
 		fi
 		_servicesRunning=true
 	fi

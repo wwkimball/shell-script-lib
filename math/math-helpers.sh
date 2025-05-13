@@ -1,5 +1,5 @@
 ###############################################################################
-# Define shell helper functions for use with Docker Compose.
+# Define shell helper functions for common math operations.
 ###############################################################################
 # Libraries must not be directly executed
 if [ -z "${BASH_SOURCE[1]}" ]; then
@@ -8,8 +8,7 @@ if [ -z "${BASH_SOURCE[1]}" ]; then
 fi
 
 # This is an import helper; just import the various function definitions
-# from the other files in the versioning directory.
+# from the other files in the math directory.
 _thisDir="${BASH_SOURCE[0]%/*}"
-source "${_thisDir}/decrement-dotted-version.sh"
-source "${_thisDir}/get-release-number-for-version.sh"
-source "${_thisDir}/get-version-from-file-name.sh"
+_floatsDir="${_thisDir}/floats"
+source "${_floatsDir}/compare.sh"

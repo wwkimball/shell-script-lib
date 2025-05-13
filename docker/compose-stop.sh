@@ -94,14 +94,16 @@ Stops the service(s) of this project.  OPTIONS include:
   -h, --help
        Display this help message and exit.
   -d DEPLOY_STAGE, --stage DEPLOY_STAGE
-       Indicate which run mode to use.  Must be one of:
+       Indicate which deployment stage to run against.  This controls which
+       Docker Compose override file is used based on the presence of the
+       DEPLOY_STAGE string within the file name matching the pattern:
+       docker-compose.DEPLOY_STAGE.yaml.  Must be one of:
          * ${DEPLOY_STAGE_DEVELOPMENT}
          * ${DEPLOY_STAGE_LAB}
+         * ${DEPLOY_STAGE_QA}
          * ${DEPLOY_STAGE_STAGING}
          * ${DEPLOY_STAGE_PRODUCTION}
-       The default is ${_deployStage}.  This controls which Docker Compose
-       override file is used based on the presence of the DEPLOY_STAGE string
-       within the file name matching the pattern:  docker-compose.*.yaml.
+       The default is ${_deployStage}.
   -v, --version
        Display the version of this script and exit.
   -y, --destroy-volumes

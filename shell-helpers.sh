@@ -9,7 +9,7 @@ fi
 
 # Constants
 _myDir="${BASH_SOURCE[0]%/*}"
-_myVersion="2025.04.17-1"
+_myVersion="2025.05.09-1"
 readonly _myDir _myVersion
 
 # Logging facility
@@ -21,6 +21,12 @@ fi
 # Docker compose helpers
 if ! source "${_myDir}/docker/compose-helpers.sh"; then
 	echo "ERROR:  Unable to source ${_myDir}/docker/compose-helpers.sh" >&2
+	exit 2
+fi
+
+# Math helpers
+if ! source "${_myDir}/math/math-helpers.sh"; then
+	echo "ERROR:  Unable to source ${_myDir}/math/math-helpers.sh" >&2
 	exit 2
 fi
 

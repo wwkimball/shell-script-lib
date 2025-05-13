@@ -172,13 +172,17 @@ EOHELP
 		-v|--verbose)
 			# Increase the verbosity of output logging
 			case $_logLevel in
-				# NORMAL->VERBOSE
-				NORMAL)
-					_logLevel="VERBOSE"
-					;;
-				# VERBOSE->DEBUG; ignore anything else
-				*)
+				VERBOSE)
+					# VERBOSE becomes DEBUG; ignore anything else
 					_logLevel="DEBUG"
+					;;
+				DEBUG)
+					# There is no level higher than DEBUG
+					_logLevel="DEBUG"
+					;;
+				*)
+					# Any other level becomes VERBOSE
+					_logLevel="VERBOSE"
 					;;
 			esac
 			;;

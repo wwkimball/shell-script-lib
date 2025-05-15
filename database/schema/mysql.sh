@@ -1,8 +1,8 @@
 #!/bin/bash
 ################################################################################
-# Update the schema of a PostgreSQL database.
+# Update the schema of a MySQL database.
 #
-# This script attempts to upgrade or downgrade a PostgreSQL database schema by
+# This script attempts to upgrade or downgrade a MySQL database schema by
 # running discoverd Schema Description Files (DDL) in the a directory tree.  The
 # files are run in alpha-numerical order, forward or reverse.  This script will
 # automatically roll-back failed operations (provided a rollback file is
@@ -15,9 +15,8 @@
 # This script can be integrated with Docker Compose to run against a local
 # development environment.  This script can also run in non-development
 # deployment stages where the database server runs on a remote server accessible
-# via a network connection; the script will use the 'psql' command to
-# communicate with it.  In either case, certain PG* environment variables must
-# be set.
+# via a network connection; the script will use the 'mysql' command to
+# communicate with it.
 #
 # A mandatory settings table must exist in the database schema and it must be a
 # key-value store with one entry used for tracking the schema version.  The
@@ -29,9 +28,9 @@
 # loss.
 #
 # Usage:
-#   export PGPASSWORD='<Your admin password>'
+#   export MYSQL_PASSWORD='<Your admin password>'
 #   ./postgresql.sh [target-version]
-#   unset PGPASSWORD
+#   unset MYSQL_PASSWORD
 #
 # Example:  Just update the schema to the latest version
 #   ./postgresql.sh
@@ -77,10 +76,11 @@ declare -a _alreadyRunDDLs
 # Process command-line arguments, when provided
 _hasErrors=false
 _bakedComposeFile=''
-_databaseHost=${PGHOST:-database}
-_databasePort=${PGPORT:-5432}
-_databaseName=${PGDATABASE:-postgres}
-_databaseUser=${PGUSER:-postgres}
+_databaseHost=${MYSQL_HOST:-database}
+_databaseName=$MYSQL_DATABASE
+_databasePassword=$MYSQL_PASSWORD
+_databasePort=${MYSQL_PORT:-3306}
+_databaseUser=${MYSQL_USER:-root}
 _deployStage=$DEPLOY_STAGE_DEVELOPMENT
 _ddlFileType=ddl
 _ddlDir="${PROJECT_DIRECTORY}/${_ddlFileType}"
@@ -124,7 +124,6 @@ while [ $# -gt 0 ]; do
 				_hasErrors=true
 			else
 				_databaseName=$2
-				export PGDATABASE="$_databaseName"
 				shift
 			fi
 			;;
@@ -163,7 +162,6 @@ while [ $# -gt 0 ]; do
 				_hasErrors=true
 			else
 				_databaseHost=$2
-				export PGHOST="$_databaseHost"
 				shift
 			fi
 			;;
@@ -185,15 +183,15 @@ Update the database schema.  OPTIONS include:
     The name of the database containing the SETTINGS_TABLE.  This is usually the
     same as the database containing the target schema but it does not need to be
     as long as your Schema Description Files create/manage both.  The default
-    value can be controlled by setting the PGDATABASE environment variable.  The
-    present default is, ${_versionDBName}.
+    value can be controlled by setting the MYSQL_DATABASE environment variable.
+    The present default is, ${_versionDBName}.
   -D DEFAULT_DATABASE, --default-db-name DEFAULT_DATABASE
     The default name of the database to run the Schema Description Files against
     whenever any are found lacking the optional database header line.  It is
     used only when the header is missing from a Schema Description File.  This
     is usually the same as the database containing the SETTINGS_TABLE but it
     does not need to be as long as your Schema Description Files create/manage
-    it, too.  The default value can be controlled by setting the PGDATABASE
+    it, too.  The default value can be controlled by setting the MYSQL_DATABASE
     environment variable.  The present default is, ${_databaseName}.
   -d DEPLOY_STAGE, --stage DEPLOY_STAGE
     Indicate which deployment stage to run against.  This controls which
@@ -212,10 +210,10 @@ Update the database schema.  OPTIONS include:
     present schema version is greater than TARGET_SCHEMA_VERSION in order to
     prevent unintended data loss.
   -h DATABASE_HOST, --db-host DATABASE_HOST
-    The hostname of the PostgreSQL database server.  Can be set to the name of
-    the local (development) Docker Compose service to use for the database.  The
-    default can be controlled by setting the PGHOST environment variable.  The
-    present default value is, ${_databaseHost}.
+    The hostname of the MySQL database server.  Can be set to the name of the
+    local (development) Docker Compose service to use for the database.  The
+    default can be controlled by setting the MYSQL_HOST environment variable.
+    The present default value is, ${_databaseHost}.
   --help
     Display this help message and exit.
   -k VERSION_KEY, --version-key VERSION_KEY
@@ -230,22 +228,20 @@ Update the database schema.  OPTIONS include:
     The name of the column in SETTINGS_TABLE containing the setting name.
     The default is, ${_settingsNameColumn}.
   -P, --password-file
-    The path to a file containing the password for the superadmin database
-    user (able to create other databases, users, and schemas).  Set this when
-    you'd rather not -- or cannot -- set the PGPASSWORD environment variable.
-    Note that this value will still be passed to the PGPASSWORD environment
-    variable for the psql command to consume it.
+    The path to a file containing the password for the DATABASE_USER (able to
+    create other databases, users, hosts, and so on).  Set this when you'd
+    rather not -- or cannot -- set the MYSQL_PASSWORD environment variable.
   -p DATABASE_PORT, --db-port DATABASE_PORT
     The port number via which the database can be accessed.  The default can be
-    controlled by setting the PGPORT environment variable.  The present default
-    is, ${_databasePort}.
+    controlled by setting the MYSQL_PORT environment variable.  The present
+    default is, ${_databasePort}.
   -s SETTINGS_TABLE, --settings-table SETTINGS_TABLE
     The name of the table containing the schema version.  The default
     is, ${_schemaSettingsTable}.
   -u DATABASE_USER, --db-user DATABASE_USER
-    The name of the superadmin user who can manage the target database
-    schema(s) and update the schema version in SETTINGS_DB_NAME.  The default
-    can be controlled by setting the PGUSER environment variable.  The present
+    The name of the superadmin user who can manage the target database server
+    and update the schema version in SETTINGS_DB_NAME.  The default can be
+    controlled by setting the MYSQL_USER environment variable.  The present
     default is, ${_databaseUser}.
   -v, --verbose
     Enable verbose logging.  This option may be specified up to twice to
@@ -351,7 +347,8 @@ EOHELP
 					logError "File not found:  $_passwordFile"
 					_hasErrors=true
 				else
-					export PGPASSWORD=$(head -1 "$_passwordFile")
+					# Read the password from the file
+					_databasePassword=$(head -1 "$_passwordFile")
 				fi
 			fi
 			;;
@@ -362,7 +359,6 @@ EOHELP
 				_hasErrors=true
 			else
 				_databasePort=$2
-				export PGPORT="$_databasePort"
 				shift
 			fi
 			;;
@@ -383,7 +379,6 @@ EOHELP
 				_hasErrors=true
 			else
 				_databaseUser=$2
-				export PGUSER="$_databaseUser"
 				shift
 			fi
 			;;
@@ -468,35 +463,29 @@ if [[ ! "$_targetVersion" =~ ^[[:digit:]]{8}-[[:digit:]]+$ ]]; then
 	_hasErrors=true
 fi
 
-# The PGPASSWORD value must be available
-if [ -z "$PGPASSWORD" ]; then
-	logError "The PGPASSWORD environment variable must be set or passed in via -p|--password-file.  See --help for more information."
-	_hasErrors=true
-fi
-
 # Identify whether the script is running in a development deployment stage
 if [ $_deployStage == $DEPLOY_STAGE_DEVELOPMENT ] && [ -f "$COMPOSE_BASE_FILE" ]; then
 	_isDevelopmentStage=true
 fi
 
+# All database connection parameters must be set
+declare -A _requiredParams=(
+	["user"]=$_databaseUser
+	["host"]=$_databaseHost
+	["port"]=$_databasePort
+	["password"]=$_databasePassword
+	["name"]=$_databaseName
+)
+for _requiredParam in "${!_requiredParams[@]}"; do
+	if [ -z "${_requiredParams[$_requiredParam]}" ]; then
+		logError "A database $_requiredParam must be specified!  See --help for more information."
+		_hasErrors=true
+	fi
+done
+
 # Additional checks based on whether the script is running against a development
 # deployment stage.
 if $_isDevelopmentStage; then
-	# Set container-specific values for the various PG* environment variables,
-	# excepting PGPASSWORD.
-	if [ -z "$PGHOST" ]; then
-		PGHOST="$_databaseHost"
-	fi
-	if [ -z "$PGPORT" ]; then
-		PGPORT="$_databasePort"
-	fi
-	if [ -z "$PGDATABASE" ]; then
-		PGDATABASE="$_databaseName"
-	fi
-	if [ -z "$PGUSER" ]; then
-		PGUSER="$_databaseUser"
-	fi
-
 	# Verify Docker is running
 	if ! docker info >/dev/null 2>&1; then
 		logError "Docker is not running!"
@@ -523,19 +512,6 @@ if $_isDevelopmentStage; then
 		logError "Unable to bake ${COMPOSE_BASE_FILE}."
 		_hasErrors=true
 	fi
-else
-	# When running in a non-development deployment stage, check for additional mandatory environment variables.
-	declare -a mandatoryEnvVars=(
-		PGHOST
-		PGPORT
-		PGUSER
-	)
-	for mandatoryEnvVar in "${mandatoryEnvVars[@]}"; do
-		if [ -z "${!mandatoryEnvVar}" ]; then
-			logError "${mandatoryEnvVar} must be set either as an environment variable or via available command-line options.  See --help for more information."
-			_hasErrors=true
-		fi
-	done
 fi
 
 # Present debugging information
@@ -550,10 +526,10 @@ logDebug "$(cat <<-EODEBUG
   Schema settings table value column:  ${_settingsValueColumn}
                   Schema version key:  ${_schemaVersionKey}
   -
-      Database Host:  ${PGHOST}
-      Database Port:  ${PGPORT}
-      Database Name:  ${PGDATABASE}
-      Database user:  ${PGUSER}
+      Database Host:  ${MYSQL_HOST}
+      Database Port:  ${MYSQL_PORT}
+      Database Name:  ${MYSQL_DATABASE}
+      Database user:  ${MYSQL_USER}
   Database Password:  <HIDDEN>
 EODEBUG
 )"
@@ -564,24 +540,26 @@ if $_hasErrors; then
 fi
 
 ###
-# Transparently pass arguments to psql.
+# Transparently pass arguments to mysql.
 #
 # This can be run either against a local development container or a remote
-# database server.  The result code and STDOUT/STDERR output are from psql.
+# database server.  The result code and STDOUT/STDERR output are from mysql.
 ##
-function executePSQL {
-	# Transparently pass all arguments through to psql
+function executeSQL {
+	# Transparently pass all arguments through to mysql
 	if $_isDevelopmentStage; then
 		# Use a Docker Compose command to execute the command against the local
 		# development container
 		dockerCompose "$_bakedComposeFile" "" \
 			--profile "$_deployStage" \
 			exec -T "$_databaseHost" \
-			psql "$@"
+			mysql "$@"
 	else
-		psql \
-			-h "$_databaseHost" \
-			-p "$_databasePort" \
+		mysql \
+			--host="$_databaseHost" \
+			--port="$_databasePort" \
+			--user="$_databaseUser" \
+			--password="$_databasePassword" \
 			"$@"
 	fi
 }
@@ -596,22 +574,25 @@ function executePSQL {
 ##
 function getPresentSchemaVersion {
 	# Get the present schema version
-	local presentVersion=$(executePSQL \
-		-v ON_ERROR_STOP=ON \
-		-U "$_databaseUser" \
-		-d "$_versionDBName" \
-		-A -t \
-		-c "SELECT ${_settingsValueColumn} FROM ${_schemaSettingsTable} WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';" \
+	local sqlQuery="SELECT ${_settingsValueColumn} FROM ${_schemaSettingsTable} WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';"
+	local presentVersion=$(executeSQL \
+		--database="$_versionDBName" \
+		--user="$_databaseUser" \
+		--skip-column-names \
+		--silent \
+		--raw \
+		--batch \
+		--execute="$sqlQuery" \
 		2>&1 \
 	)
-	local psqlExitCode=$?
+	local commandExitCode=$?
 
 	# When the present schema version cannot be found, determine the cause of the
 	# error.  When the cause is that the schema does not exist, then all DDL
 	# files will be run.  While not perfectly safe, also assume the version is
 	# zero (0) whenever the settings table does not exist.  If the cause is
 	# anything else, the script will exit with an error.
-	if [ $psqlExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
+	if [ $commandExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
 		if [[ $presentVersion =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
 			# The database schema does not exist
 			presentVersion="00000001-0"	# One higher than minimum version
@@ -635,7 +616,7 @@ function getPresentSchemaVersion {
 # @param <string> $1 The schema version to set.
 #
 # @return <integer> 0 on success; non-zero on failure.  While this value is
-#         primarily from the psql command, this function will also return 1 when
+#         primarily from the mysql command, this function will also return 1 when
 #         the schema version is not valid.
 ##
 function setSchemaVersion {
@@ -648,33 +629,36 @@ function setSchemaVersion {
 	fi
 
 	# Set the schema version
-	local psqlCommandOutput	# Declare locals without assignment to detect errors
-	psqlCommandOutput=$(executePSQL \
-		-v ON_ERROR_STOP=ON \
-		-U "$_databaseUser" \
-		-d "$_versionDBName" \
-		-A -t \
-		-c "UPDATE ${_schemaSettingsTable} SET ${_settingsValueColumn} = '${schemaVersion}' WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';" \
+	local sqlStatement="UPDATE ${_schemaSettingsTable} SET ${_settingsValueColumn} = '${schemaVersion}' WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';"
+	local commandOutput	# Declare locals without assignment to detect errors
+	commandOutput=$(executeSQL \
+		--database="$_versionDBName" \
+		--user="$_databaseUser" \
+		--skip-column-names \
+		--silent \
+		--raw \
+		--batch \
+		--execute="$sqlStatement" \
 		2>&1 \
 	)
-	local psqlExitCode=$?
+	local commandExitCode=$?
 
 	# Ignore errors related to missing database schema or settings table; the
 	# user-supplied script(s) will be run to create them.
-	if [ $psqlExitCode -ne 0 ]; then
-		if [[ $psqlCommandOutput =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
-			psqlExitCode=0
+	if [ $commandExitCode -ne 0 ]; then
+		if [[ $commandOutput =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
+			commandExitCode=0
 			logWarning "Unable to set database schema version to, ${schemaVersion}, because the database does not exist."
-		elif [[ $psqlCommandOutput == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
-			psqlExitCode=0
+		elif [[ $commandOutput == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
+			commandExitCode=0
 			logWarning "Unable to set database schema version to, ${schemaVersion}, because the ${_schemaSettingsTable} table does not exist."
 		else
-			logError "Unable to set database schema version due to error:  ${psqlCommandOutput}."
+			logError "Unable to set database schema version due to error:  ${commandOutput}."
 		fi
 	fi
 
-	# Return the psql exit code
-	return $psqlExitCode
+	# Return the command exit code
+	return $commandExitCode
 }
 
 ###
@@ -694,7 +678,7 @@ function setSchemaVersion {
 # @param <string> $2 (optional) Must be unset, empty, or "for-rollback"
 #
 # @return <integer> 0 on success; non-zero on failure.  In most cases, the exit
-#         code from the psql command will be returned.  However, when the schema
+#         code from the mysql command will be returned.  However, when the schema
 #         version cannot be set in SETTINGS_TABLE, the function will return
 #         100.
 # @return via STDOUT <string> Various infomrative messages.
@@ -715,7 +699,7 @@ function runDDLFile {
 	# Add the version update to the DDL file, all within a transaction, using
 	# a temporary file.  The temporary file is used so that the original DDL
 	# file is not modified and so that the combined commands can be piped into
-	# psql.
+	# mysql.
 	local tmpFile=$(mktemp)
 	cat >"$tmpFile" <<-EOTRANSACTION
 		BEGIN;
@@ -736,14 +720,13 @@ EOTRANSACTION
 	# Run the DDL file
 	logVerbose "Running Schema Description File, ${ddlFile}, against database, ${databaseName}."
 	local commandOutput	# Declare locals without assignment to detect errors
-	commandOutput=$(cat "$tmpFile" | executePSQL \
-		-v ON_ERROR_STOP=ON \
+	commandOutput=$(cat "$tmpFile" | executeSQL \
 		-U "$_databaseUser" \
 		-d "$databaseName" 2>&1 \
 	)
-	local psqlExitCode=$?
+	local commandExitCode=$?
 
-	if [ $psqlExitCode -eq 0 ]; then
+	if [ $commandExitCode -eq 0 ]; then
 		# Add the DDL file to the list of already-run DDL files
 		if $trackExecution; then
 			_alreadyRunDDLs+=("$ddlFile")
@@ -756,13 +739,13 @@ EOTRANSACTION
 		if [[ "$commandOutput" =~ "cannot run inside a transaction block"$ ]]; then
 			logWarning "The transaction failed because the Schema Description File contains at least one command which cannot be run inside a transaction."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without a transaction against database, ${databaseName}."
-			cat "$ddlFile" | executePSQL \
-				-v ON_ERROR_STOP=ON \
-				-U "$_databaseUser" \
-				-d "$databaseName"
-			psqlExitCode=$?
+			cat "$ddlFile" | executeSQL \
+				--batch \
+				--user="$_databaseUser" \
+				--database="$databaseName"
+			commandExitCode=$?
 
-			if [ $psqlExitCode -eq 0 ]; then
+			if [ $commandExitCode -eq 0 ]; then
 				# Add the DDL file to the list of already-run DDL files
 				if $trackExecution; then
 					_alreadyRunDDLs+=("$ddlFile")
@@ -779,13 +762,13 @@ EOTRANSACTION
 		elif [[ "$commandOutput" == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
 			logWarning "The transaction failed because the ${_schemaSettingsTable} table does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
-			cat "$ddlFile" | executePSQL \
+			cat "$ddlFile" | executeSQL \
 				-v ON_ERROR_STOP=ON \
 				-U "$_databaseUser" \
 				-d "$databaseName"
-			psqlExitCode=$?
+			commandExitCode=$?
 
-			if [ $psqlExitCode -eq 0 ]; then
+			if [ $commandExitCode -eq 0 ]; then
 				# Add the DDL file to the list of already-run DDL files
 				if $trackExecution; then
 					_alreadyRunDDLs+=("$ddlFile")
@@ -806,8 +789,8 @@ EOTRANSACTION
 	# Remove the temporary file
 	rm "$tmpFile"
 
-	# Return the psql exit code
-	return $psqlExitCode
+	# Return the command exit code
+	return $commandExitCode
 }
 
 ###

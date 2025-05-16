@@ -229,7 +229,7 @@ Update the database schema.  OPTIONS include:
   -n SETTINGS_NAME_COLUMN, --settings-name-column SETTINGS_NAME_COLUMN
     The name of the column in SETTINGS_TABLE containing the setting name.
     The default is, ${_settingsNameColumn}.
-  -P, --password-file
+  -P PASSWORD_FILE, --password-file PASSWORD_FILE
     The path to a file containing the password for the superadmin database
     user (able to create other databases, users, and schemas).  Set this when
     you'd rather not -- or cannot -- set the PGPASSWORD environment variable.

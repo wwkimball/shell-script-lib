@@ -94,6 +94,7 @@ _schemaSettingsTable=settings
 _schemaVersionKey=schema_version
 _settingsNameColumn=name
 _settingsValueColumn=value
+_sqlCommand=''
 _targetVersion=$VERSION_NUMBER_MAX
 _versionDBName="$_databaseName"
 while [ $# -gt 0 ]; do
@@ -235,6 +236,11 @@ Update the database schema.  OPTIONS include:
     The port number via which the database can be accessed.  The default can be
     controlled by setting the MYSQL_PORT environment variable.  The present
     default is, ${_databasePort}.
+  -S SQL_COMMAND, --sql-command SQL_COMMAND
+    The path to the mysql command.  This is typically not needed but can be
+	set when the mysql command is not in the PATH or when it is replaced by
+	the mariadb command.  When not set, the script will attempt to find the best
+	available command.  There is no default value.
   -s SETTINGS_TABLE, --settings-table SETTINGS_TABLE
     The name of the table containing the schema version.  The default
     is, ${_schemaSettingsTable}.
@@ -350,6 +356,16 @@ EOHELP
 				_hasErrors=true
 			else
 				_databasePort=$2
+				shift
+			fi
+			;;
+
+		-S|--sql-command)
+			if [ -z "$2" ]; then
+				logError "Missing value for $1 option!"
+				_hasErrors=true
+			else
+				_sqlCommand=$2
 				shift
 			fi
 			;;
@@ -543,22 +559,57 @@ if $_hasErrors; then
 fi
 
 ###
+# Helper function to simplify running Docker Compose commands against the DB.
+##
+function executeComposeCommand {
+	dockerCompose "$_bakedComposeFile" "" \
+		--profile "$_deployStage" \
+		exec -T "$_databaseHost" \
+		"$@"
+}
+
+###
 # Transparently pass arguments to mysql.
 #
 # This can be run either against a local development container or a remote
 # database server.  The result code and STDOUT/STDERR output are from mysql.
 ##
 function executeSQL {
+	# The mysql command is sometimes replaced by the mariadb command.  This
+	# function will use the mysql command when it is available and not emitting
+	# a deprecation warning.  Otherwise, it will use the mariadb command.
+	if [ -z "$_sqlCommand" ]; then
+		if $_isDevelopmentStage; then
+			_sqlCommand=$(executeComposeCommand which mysql)
+		else
+			_sqlCommand=$(which mysql)
+		fi
+		if [ 0 -ne $? -o -z "$_sqlCommand" ]; then
+			# Short-circuit the command test when mysql is not found
+			_sqlCommand=''
+		else
+			# Check for a deprecation warning
+			if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated program"
+			then
+				_sqlCommand=''
+			fi
+		fi
+
+		if [ -z "$_sqlCommand" ]; then
+			# The mysql command is not available; use mariadb instead
+			if $_isDevelopmentStage; then
+				_sqlCommand=$(executeComposeCommand which mariadb)
+			else
+				_sqlCommand=$(which mariadb)
+			fi
+		fi
+	fi
+
 	# Transparently pass all arguments through to mysql
 	if $_isDevelopmentStage; then
-		# Use a Docker Compose command to execute the command against the local
-		# development container
-		dockerCompose "$_bakedComposeFile" "" \
-			--profile "$_deployStage" \
-			exec -T "$_databaseHost" \
-			mysql "$@"
+		executeComposeCommand "$_sqlCommand" "$@"
 	else
-		mysql \
+		"$_sqlCommand" \
 			--host="$_databaseHost" \
 			--port="$_databasePort" \
 			--user="$_databaseUser" \

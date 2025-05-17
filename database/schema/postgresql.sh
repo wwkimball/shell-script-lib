@@ -345,14 +345,6 @@ EOHELP
 			else
 				_passwordFile=$2
 				shift
-
-				# Ensure the file exists
-				if [ ! -f "$_passwordFile" ]; then
-					logError "File not found:  $_passwordFile"
-					_hasErrors=true
-				else
-					export PGPASSWORD=$(head -1 "$_passwordFile")
-				fi
 			fi
 			;;
 
@@ -468,15 +460,27 @@ if [[ ! "$_targetVersion" =~ ^[[:digit:]]{8}-[[:digit:]]+$ ]]; then
 	_hasErrors=true
 fi
 
+# Identify whether the script is running in a development deployment stage
+if [ $_deployStage == $DEPLOY_STAGE_DEVELOPMENT ] && [ -f "$COMPOSE_BASE_FILE" ]; then
+	_isDevelopmentStage=true
+fi
+
+# When the password is being set via file, attempt to read the value
+if [ -n "$_passwordFile" ]; then
+	if [ ! -f "$_passwordFile" ]; then
+		logError "File not found:  $_passwordFile"
+		_hasErrors=true
+	else
+		# Read the password from the file
+		export PGPASSWORD=$(head -1 "$_passwordFile")
+		logDebug "Read password with length, ${#PGPASSWORD}, from file, $_passwordFile."
+	fi
+fi
+
 # The PGPASSWORD value must be available
 if [ -z "$PGPASSWORD" ]; then
 	logError "The PGPASSWORD environment variable must be set or passed in via -p|--password-file.  See --help for more information."
 	_hasErrors=true
-fi
-
-# Identify whether the script is running in a development deployment stage
-if [ $_deployStage == $DEPLOY_STAGE_DEVELOPMENT ] && [ -f "$COMPOSE_BASE_FILE" ]; then
-	_isDevelopmentStage=true
 fi
 
 # Additional checks based on whether the script is running against a development

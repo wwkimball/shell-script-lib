@@ -341,15 +341,6 @@ EOHELP
 			else
 				_passwordFile=$2
 				shift
-
-				# Ensure the file exists
-				if [ ! -f "$_passwordFile" ]; then
-					logError "File not found:  $_passwordFile"
-					_hasErrors=true
-				else
-					# Read the password from the file
-					_databasePassword=$(head -1 "$_passwordFile")
-				fi
 			fi
 			;;
 
@@ -466,6 +457,18 @@ fi
 # Identify whether the script is running in a development deployment stage
 if [ $_deployStage == $DEPLOY_STAGE_DEVELOPMENT ] && [ -f "$COMPOSE_BASE_FILE" ]; then
 	_isDevelopmentStage=true
+fi
+
+# When the password is being set via file, attempt to read the value
+if [ -n "$_passwordFile" ]; then
+	if [ ! -f "$_passwordFile" ]; then
+		logError "File not found:  $_passwordFile"
+		_hasErrors=true
+	else
+		# Read the password from the file
+		_databasePassword=$(head -1 "$_passwordFile")
+		logDebug "Read password with length, ${#_databasePassword}, from file, $_passwordFile."
+	fi
 fi
 
 # All database connection parameters must be set

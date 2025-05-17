@@ -277,7 +277,15 @@ done
 # processing when it is.
 if [ -n "$_deploymentStage" ]; then
 	_ambiguateEnvironmentVariables=true
-	_ucDeploymentStage=${_deploymentStage^^}
+
+	# OSX causes problems for string manipulation
+	if [[ "$OSTYPE" == darwin* ]]; then
+		# OSX does not support the '^^' operator, so use tr instead
+		_ucDeploymentStage=$(echo "$_deploymentStage" | tr '[:lower:]' '[:upper:]')
+	else
+		# BASH version >= 4.0 supports the '^^' operator
+		_ucDeploymentStage=${_deploymentStage^^}
+	fi
 fi
 
 # Create a function which accepts a base environment variable name and checks

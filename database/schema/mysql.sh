@@ -73,6 +73,18 @@ fi
 # Create a global array for tracking executed DDL files
 declare -a _alreadyRunDDLs
 
+# Allow an environment variable to control whether TLS is enabled
+_disableTLS=false
+if [ -n "$MYSQL_DISABLE_TLS" ]; then
+	# Any "truthy" value will disable TLS
+	if [[ "$MYSQL_DISABLE_TLS" =~ ^[Tt][Rr][Uu][Ee]$ ]] \
+		|| [[ "$MYSQL_DISABLE_TLS" =~ ^[Yy][Ee][Ss]$ ]] \
+		|| [[ "$MYSQL_DISABLE_TLS" =~ ^[1]$ ]] \
+	then
+		_disableTLS=true
+	fi
+fi
+
 # Process command-line arguments, when provided
 _hasErrors=false
 _bakedComposeFile=''
@@ -244,6 +256,12 @@ Update the database schema.  OPTIONS include:
   -s SETTINGS_TABLE, --settings-table SETTINGS_TABLE
     The name of the table containing the schema version.  The default
     is, ${_schemaSettingsTable}.
+  -T, --no-tls
+    Disable TLS when connecting to the database server.  This is useful when
+	the database server is running in a local Docker container and TLS is not
+	enabled.  TLS is enabled by default.  It can also be disabled by setting
+	the MYSQL_DISABLE_TLS environment variable to any "truthy" value, like
+	"true", "yes", or 1.
   -u DATABASE_USER, --db-user DATABASE_USER
     The name of the superadmin user who can manage the target database server
     and update the schema version in SETTINGS_DB_NAME.  The default can be
@@ -380,6 +398,10 @@ EOHELP
 			fi
 			;;
 
+		-T|--no-tls)
+			_disableTLS=true
+			;;
+
 		-u|--db-user)
 			if [ -z "$2" ]; then
 				logError "Missing value for $1 option!"
@@ -460,6 +482,7 @@ export LOG_LEVEL=$_logLevel
 # TARGET_SCHEMA_VERSION must be set or omitted
 if [ $# -gt 1 ]; then
 	logError "Too many positional arguments.  See --help for more information."
+	logDebug "Positional arguments:  $*"
 	_hasErrors=true
 fi
 _targetVersion=${1:-$VERSION_NUMBER_MAX}
@@ -589,7 +612,7 @@ function executeSQL {
 			_sqlCommand=''
 		else
 			# Check for a deprecation warning
-			if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated program"
+			if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated"
 			then
 				_sqlCommand=''
 			fi
@@ -605,15 +628,31 @@ function executeSQL {
 		fi
 	fi
 
+	# Handle TLS connections, or the lack thereof
+	declare -a tlsOptions
+	if $_disableTLS; then
+		if [[ $_sqlCommand =~ mariadb ]]; then
+			# The mariadb command does not support the --ssl-mode option
+			tlsOptions+=(
+				--skip_ssl
+			)
+		else
+			tlsOptions+=(
+				--ssl-mode=DISABLED
+			)
+		fi
+	fi
+
 	# Transparently pass all arguments through to mysql
 	if $_isDevelopmentStage; then
-		executeComposeCommand "$_sqlCommand" "$@"
+		executeComposeCommand "$_sqlCommand" ${tlsOptions[@]} "$@"
 	else
 		"$_sqlCommand" \
 			--host="$_databaseHost" \
 			--port="$_databasePort" \
 			--user="$_databaseUser" \
 			--password="$_databasePassword" \
+			${tlsOptions[@]} \
 			"$@"
 	fi
 }
@@ -631,7 +670,6 @@ function getPresentSchemaVersion {
 	local sqlQuery="SELECT ${_settingsValueColumn} FROM ${_schemaSettingsTable} WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';"
 	local presentVersion=$(executeSQL \
 		--database="$_versionDBName" \
-		--user="$_databaseUser" \
 		--skip-column-names \
 		--silent \
 		--raw \
@@ -647,7 +685,8 @@ function getPresentSchemaVersion {
 	# zero (0) whenever the settings table does not exist.  If the cause is
 	# anything else, the script will exit with an error.
 	if [ $commandExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
-		if [[ $presentVersion =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
+		# ERROR 1049 (42000): Unknown database 'email'.
+		if [[ $presentVersion =~ "Unknown database '${_versionDBName}'"$ ]]; then
 			# The database schema does not exist
 			presentVersion="00000001-0"	# One higher than minimum version
 		elif [[ $presentVersion == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
@@ -687,7 +726,6 @@ function setSchemaVersion {
 	local commandOutput	# Declare locals without assignment to detect errors
 	commandOutput=$(executeSQL \
 		--database="$_versionDBName" \
-		--user="$_databaseUser" \
 		--skip-column-names \
 		--silent \
 		--raw \
@@ -700,7 +738,8 @@ function setSchemaVersion {
 	# Ignore errors related to missing database schema or settings table; the
 	# user-supplied script(s) will be run to create them.
 	if [ $commandExitCode -ne 0 ]; then
-		if [[ $commandOutput =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
+		# ERROR 1049 (42000): Unknown database 'email'.
+		if [[ $commandOutput =~ "Unknown database '${_versionDBName}'"$ ]]; then
 			commandExitCode=0
 			logWarning "Unable to set database schema version to, ${schemaVersion}, because the database does not exist."
 		elif [[ $commandOutput == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
@@ -775,8 +814,9 @@ EOTRANSACTION
 	logVerbose "Running Schema Description File, ${ddlFile}, against database, ${databaseName}."
 	local commandOutput	# Declare locals without assignment to detect errors
 	commandOutput=$(cat "$tmpFile" | executeSQL \
-		-U "$_databaseUser" \
-		-d "$databaseName" 2>&1 \
+		--batch \
+		--database="$databaseName" \
+		2>&1 \
 	)
 	local commandExitCode=$?
 
@@ -795,7 +835,6 @@ EOTRANSACTION
 			logInfo "Re-running Schema Description File, ${ddlFile}, without a transaction against database, ${databaseName}."
 			cat "$ddlFile" | executeSQL \
 				--batch \
-				--user="$_databaseUser" \
 				--database="$databaseName"
 			commandExitCode=$?
 
@@ -817,9 +856,7 @@ EOTRANSACTION
 			logWarning "The transaction failed because the ${_schemaSettingsTable} table does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
 			cat "$ddlFile" | executeSQL \
-				-v ON_ERROR_STOP=ON \
-				-U "$_databaseUser" \
-				-d "$databaseName"
+				--batch
 			commandExitCode=$?
 
 			if [ $commandExitCode -eq 0 ]; then
@@ -833,6 +870,28 @@ EOTRANSACTION
 			else
 				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}."
 			fi
+
+		# Warn when the database schema does not exist and rerun the DDL file
+		# without the version update.
+		elif [[ $commandOutput =~ "Unknown database '${databaseName}'"$ ]]; then
+			logWarning "The transaction failed because the database schema does not exist."
+			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
+			cat "$ddlFile" | executeSQL \
+				--batch
+			commandExitCode=$?
+
+			if [ $commandExitCode -eq 0 ]; then
+				# Add the DDL file to the list of already-run DDL files
+				if $trackExecution; then
+					_alreadyRunDDLs+=("$ddlFile")
+				fi
+				if ! setSchemaVersion $ddlVersion; then
+					return 102
+				fi
+			else
+				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}."
+			fi
+
 		else
 			# Indicate that the DDL file failed to run
 			logError "$commandOutput"

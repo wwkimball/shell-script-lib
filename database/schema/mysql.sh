@@ -685,11 +685,12 @@ function getPresentSchemaVersion {
 	# zero (0) whenever the settings table does not exist.  If the cause is
 	# anything else, the script will exit with an error.
 	if [ $commandExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
-		# ERROR 1049 (42000): Unknown database 'email'.
-		if [[ $presentVersion =~ "Unknown database '${_versionDBName}'"$ ]]; then
+		# ERROR 1049 (42000): Unknown database '${_versionDBName}'
+		if [[ $presentVersion == *"Unknown database '${_versionDBName}'"* ]]; then
 			# The database schema does not exist
 			presentVersion="00000001-0"	# One higher than minimum version
-		elif [[ $presentVersion == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
+		# ERROR 1146 (42S02) at line 1: Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist
+		elif [[ $presentVersion == *"Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist"* ]]; then
 			# The database schema exists but not the required settings table
 			presentVersion="00000001-0"	# One higher than minimum version
 		else
@@ -738,11 +739,12 @@ function setSchemaVersion {
 	# Ignore errors related to missing database schema or settings table; the
 	# user-supplied script(s) will be run to create them.
 	if [ $commandExitCode -ne 0 ]; then
-		# ERROR 1049 (42000): Unknown database 'email'.
-		if [[ $commandOutput =~ "Unknown database '${_versionDBName}'"$ ]]; then
+		# ERROR 1049 (42000): Unknown database '${_versionDBName}'
+		if [[ $commandOutput == *"Unknown database '${_versionDBName}'"* ]]; then
 			commandExitCode=0
 			logWarning "Unable to set database schema version to, ${schemaVersion}, because the database does not exist."
-		elif [[ $commandOutput == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
+		# ERROR 1146 (42S02) at line 1: Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist
+		elif [[ $commandOutput == *"Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist"* ]]; then
 			commandExitCode=0
 			logWarning "Unable to set database schema version to, ${schemaVersion}, because the ${_schemaSettingsTable} table does not exist."
 		else
@@ -852,7 +854,7 @@ EOTRANSACTION
 
 		# Warn when the settings table does not exist and rerun the DDL file
 		# without the version update.
-		elif [[ "$commandOutput" == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then
+		elif [[ "$commandOutput" == *"Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist"* ]]; then
 			logWarning "The transaction failed because the ${_schemaSettingsTable} table does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
 			cat "$ddlFile" | executeSQL \
@@ -873,7 +875,7 @@ EOTRANSACTION
 
 		# Warn when the database schema does not exist and rerun the DDL file
 		# without the version update.
-		elif [[ $commandOutput =~ "Unknown database '${databaseName}'"$ ]]; then
+		elif [[ $commandOutput == *"Unknown database '${databaseName}'"* ]]; then
 			logWarning "The transaction failed because the database schema does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
 			cat "$ddlFile" | executeSQL \

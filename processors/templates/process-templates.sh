@@ -288,6 +288,12 @@ if [ -n "$_deploymentStage" ]; then
 	fi
 fi
 
+# When debugging is enabled, print a map of the selected environment variables
+logDebug "Substitution variables:"
+for varName in "${_substitutionVars[@]}"; do
+	logDebug "  ${varName}=${!varName}"
+done
+
 # Create a function which accepts a base environment variable name and checks
 # for the existence of the deployment stage-specific variable.  If it exists,
 # the deployment stage-specific variable's value is copied to the base variable.

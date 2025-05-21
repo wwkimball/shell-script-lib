@@ -250,18 +250,17 @@ Update the database schema.  OPTIONS include:
     default is, ${_databasePort}.
   -S SQL_COMMAND, --sql-command SQL_COMMAND
     The path to the mysql command.  This is typically not needed but can be
-	set when the mysql command is not in the PATH or when it is replaced by
-	the mariadb command.  When not set, the script will attempt to find the best
-	available command.  There is no default value.
+    set when the mysql command is not in the PATH or when it is replaced by
+    the mariadb command.  When not set, the script will attempt to find the best
+    available command.  There is no default value.
   -s SETTINGS_TABLE, --settings-table SETTINGS_TABLE
     The name of the table containing the schema version.  The default
     is, ${_schemaSettingsTable}.
   -T, --no-tls
     Disable TLS when connecting to the database server.  This is useful when
-	the database server is running in a local Docker container and TLS is not
-	enabled.  TLS is enabled by default.  It can also be disabled by setting
-	the MYSQL_DISABLE_TLS environment variable to any "truthy" value, like
-	"true", "yes", or 1.
+    the database server is running in a local Docker container where TLS is not
+    typically enabled.  It can also be disabled by setting the MYSQL_DISABLE_TLS
+    environment variable to any "truthy" value, like "true", "yes", or 1.
   -u DATABASE_USER, --db-user DATABASE_USER
     The name of the superadmin user who can manage the target database server
     and update the schema version in SETTINGS_DB_NAME.  The default can be

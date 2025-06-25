@@ -6,6 +6,9 @@
 # TMPDIR <string> The directory in which to create temporary files like baked
 #                 Docker Compose files.  The default is the system's temporary
 #                 directory.
+# DOCKER_SCOUT_ENABLED <boolean> Whether to enable Docker Scout for the built
+#                                images.  Default is false because Scout is
+#                                not available in all Docker installations.
 #
 # Optional external assets:
 # - build-pre.sh <DEPLOYMENT_STAGE> <BAKED_DOCKER_COMPOSE_FILE>
@@ -64,6 +67,18 @@ readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
 	echo "ERROR:  Failed to import shell helpers!" >&2
 	exit 2
+fi
+
+# Check for Docker Scout enablement; any truthy value will do
+_withDockerScout=false
+if [ -n "${DOCKER_SCOUT_ENABLED}" ]; then
+	if [[ "${DOCKER_SCOUT_ENABLED}" =~ ^[Tt][Rr][Uu][Ee]$ ]] || \
+		[[ "${DOCKER_SCOUT_ENABLED}" =~ ^[Yy][Ee][Ss]$ ]] || \
+		[[ "${DOCKER_SCOUT_ENABLED}" =~ ^[Oo][Nn]$ ]] || \
+		[[ "${DOCKER_SCOUT_ENABLED}" =~ ^[1]$ ]]
+	then
+		_withDockerScout=true
+	fi
 fi
 
 # Process command-line arguments, if there are any
@@ -168,6 +183,11 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        in order to properly version and build-tag Docker images via this script.
        The default is:
        ${_imageVersionFile}.
+  -S, --with-scout
+       Enable Docker Scout security scanning for images built by this script.
+       Because most Docker installations do not include Scout, this option is
+       off by default.  You can externally control this option by setting the
+       DOCKER_SCOUT_ENABLED environment variable to any "truthy" value.
   -s, --start
        Start the Docker environment after building.  The default is to NOT
        start the environment.  Note that some operations will start the
@@ -221,6 +241,10 @@ EOHELP
 				_imageVersionFile="$2"
 				shift
 			fi
+			;;
+
+		-S|--with-scout)
+			_withDockerScout=true
 			;;
 
 		-s|--start)
@@ -488,7 +512,10 @@ for buildService in "${buildServices[@]}"; do
 	fi
 
 	# Show a brief security summary of the new image
-	docker scout quickview "local://${dockerImageRef}"
+	if $_withDockerScout; then
+		logLine "Running Docker Scout quickview on the new image, ${dockerImageRef}..."
+		docker scout quickview "local://${dockerImageRef}"
+	fi
 
 	# Tag this new image as latest
 	logLine "Tagging the new image as latest..."

@@ -796,11 +796,18 @@ function runDDLFile {
 	# mysql.
 	local tmpFile=$(mktemp)
 	cat >"$tmpFile" <<-EOTRANSACTION
-		BEGIN;
+		SET autocommit = OFF;
+		START TRANSACTION;
 		$(cat "$ddlFile")
-		UPDATE ${_schemaSettingsTable} SET ${_settingsValueColumn} = '${ddlVersion}' WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';
+		UPDATE \`${_versionDBName}\`.\`${_schemaSettingsTable}\` SET \`${_settingsValueColumn}\` = '${ddlVersion}' WHERE \`${_settingsNameColumn}\` = '${_schemaVersionKey}';
 		COMMIT;
 EOTRANSACTION
+
+	# When running in DEBUG mode, show the temporary file
+	if [ "$LOG_LEVEL" == "DEBUG" ]; then
+		logDebug "Running DDL file, ${tmpFile}:"
+		cat "$tmpFile"
+	fi
 
 	# The database name to run against is stored in the DDL file as a
 	# comment in the header of the file.  It can be on any line before the
@@ -834,7 +841,20 @@ EOTRANSACTION
 		if [[ "$commandOutput" =~ "cannot run inside a transaction block"$ ]]; then
 			logWarning "The transaction failed because the Schema Description File contains at least one command which cannot be run inside a transaction."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without a transaction against database, ${databaseName}."
-			cat "$ddlFile" | executeSQL \
+
+			cat >"$tmpFile" <<-EOTRANSACTION
+				SET autocommit = ON;
+				$(cat "$ddlFile")
+				UPDATE \`${_versionDBName}\`.\`${_schemaSettingsTable}\` SET \`${_settingsValueColumn}\` = '${ddlVersion}' WHERE \`${_settingsNameColumn}\` = '${_schemaVersionKey}';
+EOTRANSACTION
+
+		   	# In DEBUG mode, show the DDL file
+			if [ "$LOG_LEVEL" == "DEBUG" ]; then
+				logDebug "Running bare DDL file, ${tmpFile}:"
+				cat "$tmpFile"
+			fi
+
+			cat "$tmpFile" | executeSQL \
 				--batch \
 				--database="$databaseName"
 			commandExitCode=$?
@@ -848,16 +868,32 @@ EOTRANSACTION
 					return 100
 				fi
 			else
-				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}."
+				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}, even without a transaction."
 			fi
 
 		# Warn when the settings table does not exist and rerun the DDL file
 		# without the version update.
-		elif [[ "$commandOutput" == *"Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist"* ]]; then
+		elif [[ "$commandOutput" == *"Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist"* ]] \
+			|| [[ "$commandOutput" == *"Table 'sys.${_schemaSettingsTable}' doesn't exist"* ]]
+		then
 			logWarning "The transaction failed because the ${_schemaSettingsTable} table does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
-			cat "$ddlFile" | executeSQL \
-				--batch
+
+			cat >"$tmpFile" <<-EOTRANSACTION
+				START TRANSACTION;
+				$(cat "$ddlFile")
+				COMMIT;
+EOTRANSACTION
+
+		   	# In DEBUG mode, show the DDL file
+			if [ "$LOG_LEVEL" == "DEBUG" ]; then
+				logDebug "Running bare DDL file, ${ddlFile}:"
+				cat "$ddlFile"
+			fi
+
+			cat "$tmpFile" | executeSQL \
+				--batch \
+				--database="sys"
 			commandExitCode=$?
 
 			if [ $commandExitCode -eq 0 ]; then
@@ -869,7 +905,7 @@ EOTRANSACTION
 					return 101
 				fi
 			else
-				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}."
+				logError "Schema Description File, ${ddlFile}, failed against database, ${databaseName}, even without updating the schema version."
 			fi
 
 		# Warn when the database schema does not exist and rerun the DDL file
@@ -877,6 +913,13 @@ EOTRANSACTION
 		elif [[ $commandOutput == *"Unknown database '${databaseName}'"* ]]; then
 			logWarning "The transaction failed because the database schema does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
+
+		   	# In DEBUG mode, show the DDL file
+			if [ "$LOG_LEVEL" == "DEBUG" ]; then
+				logDebug "Running bare DDL file, ${ddlFile}:"
+				cat "$ddlFile"
+			fi
+
 			cat "$ddlFile" | executeSQL \
 				--batch
 			commandExitCode=$?

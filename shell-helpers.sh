@@ -24,6 +24,12 @@ if ! source "${_myDir}/docker/compose-helpers.sh"; then
 	exit 2
 fi
 
+# General Docker helpers
+if ! source "${_myDir}/docker/source-functions.sh"; then
+	echo "ERROR:  Unable to source ${_myDir}/docker/source-functions.sh" >&2
+	exit 2
+fi
+
 # Math helpers
 if ! source "${_myDir}/math/math-helpers.sh"; then
 	echo "ERROR:  Unable to source ${_myDir}/math/math-helpers.sh" >&2

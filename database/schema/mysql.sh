@@ -79,7 +79,7 @@ if [ -n "$MYSQL_DISABLE_TLS" ]; then
 	# Any "truthy" value will disable TLS
 	if [[ "$MYSQL_DISABLE_TLS" =~ ^[Tt][Rr][Uu][Ee]$ ]] \
 		|| [[ "$MYSQL_DISABLE_TLS" =~ ^[Yy][Ee][Ss]$ ]] \
-		|| [[ "$MYSQL_DISABLE_TLS" =~ ^[1]$ ]] \
+		|| [[ "$MYSQL_DISABLE_TLS" =~ ^[1]$ ]]
 	then
 		_disableTLS=true
 	fi

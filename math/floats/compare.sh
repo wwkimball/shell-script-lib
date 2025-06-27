@@ -109,10 +109,52 @@ function compareFloats {
 
 	# If awk is available, then use it to compare the numbers
 	if [ ! -z "$(which awk 2>/dev/null)" ]; then
-		local result=$(
-			awk -v n1="$lhs" -v n2="$rhs"
-			'BEGIN { if (n1 < n2) { print 1 } else if (n1 > n2) { print 3 } else { print 2 } }'
-		)
+		local result
+		local os_type=$(uname -s)
+		local os_release=""
+
+		# Detect the operating system
+		case "$os_type" in
+			"Linux")
+				if [ -f /etc/rocky-release ]; then
+					os_release="rocky"
+				elif [ -f /etc/redhat-release ] && grep -q "Rocky Linux" /etc/redhat-release 2>/dev/null; then
+					os_release="rocky"
+				elif [ -f /etc/lsb-release ] && grep -q "Ubuntu" /etc/lsb-release 2>/dev/null; then
+					os_release="ubuntu"
+				elif [ -f /etc/os-release ]; then
+					if grep -q "Ubuntu" /etc/os-release 2>/dev/null; then
+						os_release="ubuntu"
+					elif grep -q "Rocky Linux" /etc/os-release 2>/dev/null; then
+						os_release="rocky"
+					fi
+				fi
+				;;
+			"Darwin")
+				os_release="macos"
+				;;
+		esac
+
+		# Use OS-specific awk syntax
+		case "$os_release" in
+			"rocky")
+				# Rocky Linux 8+ requires explicit string concatenation and different quoting
+				result=$(awk -v n1="$lhs" -v n2="$rhs" 'BEGIN {
+					if (n1 + 0 < n2 + 0) { print "1" }
+					else if (n1 + 0 > n2 + 0) { print "3" }
+					else { print "2" }
+				}')
+				;;
+			"ubuntu"|"macos"|*)
+				# Standard awk syntax for Ubuntu, macOS, and other systems
+				result=$(awk -v n1="$lhs" -v n2="$rhs" 'BEGIN {
+					if (n1 < n2) { print 1 }
+					else if (n1 > n2) { print 3 }
+					else { print 2 }
+				}')
+				;;
+		esac
+
 		return $result
 	fi
 

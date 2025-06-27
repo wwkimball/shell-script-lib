@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ################################################################################
 # Update the schema of a MySQL database.
 #
@@ -106,7 +106,7 @@ _schemaSettingsTable=settings
 _schemaVersionKey=schema_version
 _settingsNameColumn=name
 _settingsValueColumn=value
-_sqlCommand=''
+_sqlCommand=${MYSQL_COMMAND:-''}
 _targetVersion=$VERSION_NUMBER_MAX
 _versionDBName="$_databaseName"
 while [ $# -gt 0 ]; do
@@ -252,7 +252,8 @@ Update the database schema.  OPTIONS include:
     The path to the mysql command.  This is typically not needed but can be
     set when the mysql command is not in the PATH or when it is replaced by
     the mariadb command.  When not set, the script will attempt to find the best
-    available command.  There is no default value.
+    available command.  The default can be controlled by setting the
+    MYSQL_COMMAND environment variable.
   -s SETTINGS_TABLE, --settings-table SETTINGS_TABLE
     The name of the table containing the schema version.  The default
     is, ${_schemaSettingsTable}.
@@ -475,6 +476,17 @@ EOHELP
 	shift
 done
 
+# When the version database name is not set, use the default database name
+if [ -z "$_versionDBName" ]; then
+	_versionDBName=$_databaseName
+else
+	# Ensure the version database name is not empty
+	if [ -z "$_versionDBName" ]; then
+		logError "The version database name cannot be empty!"
+		_hasErrors=true
+	fi
+fi
+
 # Promote the assigned log level
 export LOG_LEVEL=$_logLevel
 
@@ -566,12 +578,22 @@ logDebug "$(cat <<-EODEBUG
    Schema settings table name column:  ${_settingsNameColumn}
   Schema settings table value column:  ${_settingsValueColumn}
                   Schema version key:  ${_schemaVersionKey}
+               Version database name:  ${_versionDBName}
+               Target schema version:  ${_targetVersion}
   -
-      Database Host:  ${MYSQL_HOST}
-      Database Port:  ${MYSQL_PORT}
-      Database Name:  ${MYSQL_DATABASE}
-      Database user:  ${MYSQL_USER}
-  Database Password:  <HIDDEN>
+  ENVIRONMENT VARIABLES:
+      Database Host:  ${MYSQL_HOST:-"<Not set>"}
+      Database Port:  ${MYSQL_PORT:-"<Not set>"}
+      Database Name:  ${MYSQL_DATABASE:-"<Not set>"}
+      Database user:  ${MYSQL_USER:-"<Not set>"}
+  Database Password:  $([ -z "$MYSQL_PASSWORD" ] && echo "<Not set>" || echo "<Set>")
+
+  USING VALUES:
+      Database Host:  ${_databaseHost}
+      Database Port:  ${_databasePort}
+      Database Name:  ${_databaseName}
+      Database user:  ${_databaseUser}
+  Database Password:  $([ -z "$_databasePassword" ] && echo "<Not set>" || echo "<Set>")
 EODEBUG
 )"
 
@@ -597,34 +619,9 @@ function executeComposeCommand {
 # database server.  The result code and STDOUT/STDERR output are from mysql.
 ##
 function executeSQL {
-	# The mysql command is sometimes replaced by the mariadb command.  This
-	# function will use the mysql command when it is available and not emitting
-	# a deprecation warning.  Otherwise, it will use the mariadb command.
+	# The SQL command should already be detected and set at script startup
 	if [ -z "$_sqlCommand" ]; then
-		if $_isDevelopmentStage; then
-			_sqlCommand=$(executeComposeCommand which mysql)
-		else
-			_sqlCommand=$(which mysql)
-		fi
-		if [ 0 -ne $? -o -z "$_sqlCommand" ]; then
-			# Short-circuit the command test when mysql is not found
-			_sqlCommand=''
-		else
-			# Check for a deprecation warning
-			if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated"
-			then
-				_sqlCommand=''
-			fi
-		fi
-
-		if [ -z "$_sqlCommand" ]; then
-			# The mysql command is not available; use mariadb instead
-			if $_isDevelopmentStage; then
-				_sqlCommand=$(executeComposeCommand which mariadb)
-			else
-				_sqlCommand=$(which mariadb)
-			fi
-		fi
+		errorOut 3 "SQL command detection has failed.  Please set the MYSQL_COMMAND environment variable to the path of the mysql or mariadb command."
 	fi
 
 	# Handle TLS connections, or the lack thereof
@@ -644,7 +641,11 @@ function executeSQL {
 
 	# Transparently pass all arguments through to mysql
 	if $_isDevelopmentStage; then
-		executeComposeCommand "$_sqlCommand" ${tlsOptions[@]} "$@"
+		executeComposeCommand "$_sqlCommand" \
+			${tlsOptions[@]} \
+			--user="$_databaseUser" \
+			--password="$_databasePassword" \
+			"$@"
 	else
 		"$_sqlCommand" \
 			--host="$_databaseHost" \
@@ -678,12 +679,21 @@ function getPresentSchemaVersion {
 	)
 	local commandExitCode=$?
 
+	# The 2>&1 causes a spurious newline to prepend the output when the command
+	# is run through Docker Compose, so remove it.
+	if [[ "$presentVersion" =~ ^$'\n' ]]; then
+		# Remove the leading newline
+		presentVersion="${presentVersion:1}"
+	fi
+
 	# When the present schema version cannot be found, determine the cause of the
 	# error.  When the cause is that the schema does not exist, then all DDL
 	# files will be run.  While not perfectly safe, also assume the version is
 	# zero (0) whenever the settings table does not exist.  If the cause is
 	# anything else, the script will exit with an error.
 	if [ $commandExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
+		logDebugToError "${FUNCNAME[0]}:  Failing due to exit code, ${commandExitCode}, and non-matching command output:  [${presentVersion}]."
+
 		# ERROR 1049 (42000): Unknown database '${_versionDBName}'
 		if [[ $presentVersion == *"Unknown database '${_versionDBName}'"* ]]; then
 			# The database schema does not exist
@@ -790,25 +800,6 @@ function runDDLFile {
 	local ddlVersion=$(basename $ddlFile "$_rollbackSuffix")
 	ddlVersion=$(basename $ddlVersion "$_ddlSuffix")
 
-	# Add the version update to the DDL file, all within a transaction, using
-	# a temporary file.  The temporary file is used so that the original DDL
-	# file is not modified and so that the combined commands can be piped into
-	# mysql.
-	local tmpFile=$(mktemp)
-	cat >"$tmpFile" <<-EOTRANSACTION
-		SET autocommit = OFF;
-		START TRANSACTION;
-		$(cat "$ddlFile")
-		UPDATE \`${_versionDBName}\`.\`${_schemaSettingsTable}\` SET \`${_settingsValueColumn}\` = '${ddlVersion}' WHERE \`${_settingsNameColumn}\` = '${_schemaVersionKey}';
-		COMMIT;
-EOTRANSACTION
-
-	# When running in DEBUG mode, show the temporary file
-	if [ "$LOG_LEVEL" == "DEBUG" ]; then
-		logDebug "Running DDL file, ${tmpFile}:"
-		cat "$tmpFile"
-	fi
-
 	# The database name to run against is stored in the DDL file as a
 	# comment in the header of the file.  It can be on any line before the
 	# first non-commented line.
@@ -818,14 +809,35 @@ EOTRANSACTION
 		databaseName=$_databaseName
 	fi
 
-	# Run the DDL file
+	# Add the version update to the DDL file, all within a transaction, using
+	# a temporary file.  The temporary file is used so that the original DDL
+	# file is not modified and so that the combined commands can be piped into
+	# mysql.
+	local tmpFile=$(mktemp)
+	cat >"$tmpFile" <<-EOTRANSACTION
+		SET autocommit=0;
+		START TRANSACTION;
+
+		USE \`${databaseName}\`;
+
+		$(cat "$ddlFile")
+
+		USE \`${_versionDBName}\`;
+
+		UPDATE \`${_versionDBName}\`.\`${_schemaSettingsTable}\` SET \`${_settingsValueColumn}\` = '${ddlVersion}' WHERE \`${_settingsNameColumn}\` = '${_schemaVersionKey}';
+
+		COMMIT;
+EOTRANSACTION
+
+	logDebug "Executing DDL file: ${ddlFile} (temp: ${tmpFile})"
+	logDebug "Target database: ${databaseName}"
+
+	# Run the DDL file without specifying --database to avoid conflicts with USE statements
 	logVerbose "Running Schema Description File, ${ddlFile}, against database, ${databaseName}."
-	local commandOutput	# Declare locals without assignment to detect errors
-	commandOutput=$(cat "$tmpFile" | executeSQL \
-		--batch \
-		--database="$databaseName" \
-		2>&1 \
-	)
+	local commandOutput
+
+	# Execute the SQL using file input redirection for reliable execution
+	commandOutput=$(executeSQL <"$tmpFile" 2>&1)
 	local commandExitCode=$?
 
 	if [ $commandExitCode -eq 0 ]; then
@@ -835,6 +847,9 @@ EOTRANSACTION
 		fi
 		logVerbose "Transaction-based execution of ${ddlFile} was successful."
 	else
+		logDebug "SQL execution exit code: $commandExitCode"
+		logDebug "SQL execution error output: [$commandOutput]"
+
 		# Check the command output for a message indicating that the DDL file
 		# cannot be run in a transaction.  If so, then run the DDL file
 		# without a transaction.
@@ -843,20 +858,17 @@ EOTRANSACTION
 			logInfo "Re-running Schema Description File, ${ddlFile}, without a transaction against database, ${databaseName}."
 
 			cat >"$tmpFile" <<-EOTRANSACTION
-				SET autocommit = ON;
+				SET autocommit=1;
 				$(cat "$ddlFile")
 				UPDATE \`${_versionDBName}\`.\`${_schemaSettingsTable}\` SET \`${_settingsValueColumn}\` = '${ddlVersion}' WHERE \`${_settingsNameColumn}\` = '${_schemaVersionKey}';
 EOTRANSACTION
 
-		   	# In DEBUG mode, show the DDL file
-			if [ "$LOG_LEVEL" == "DEBUG" ]; then
-				logDebug "Running bare DDL file, ${tmpFile}:"
-				cat "$tmpFile"
-			fi
+			logDebug "Running bare DDL file: ${ddlFile} (temp: ${tmpFile})"
 
-			cat "$tmpFile" | executeSQL \
+			executeSQL \
 				--batch \
-				--database="$databaseName"
+				--database="$databaseName" \
+				< "$tmpFile"
 			commandExitCode=$?
 
 			if [ $commandExitCode -eq 0 ]; then
@@ -885,15 +897,12 @@ EOTRANSACTION
 				COMMIT;
 EOTRANSACTION
 
-		   	# In DEBUG mode, show the DDL file
-			if [ "$LOG_LEVEL" == "DEBUG" ]; then
-				logDebug "Running bare DDL file, ${ddlFile}:"
-				cat "$ddlFile"
-			fi
+			logDebug "Running bare DDL file: ${ddlFile} against sys database"
 
-			cat "$tmpFile" | executeSQL \
+			executeSQL \
 				--batch \
-				--database="sys"
+				--database="sys" \
+				< "$tmpFile"
 			commandExitCode=$?
 
 			if [ $commandExitCode -eq 0 ]; then
@@ -913,15 +922,9 @@ EOTRANSACTION
 		elif [[ $commandOutput == *"Unknown database '${databaseName}'"* ]]; then
 			logWarning "The transaction failed because the database schema does not exist."
 			logInfo "Re-running Schema Description File, ${ddlFile}, without the version update against database, ${databaseName}."
+			logDebug "Running bare DDL file: ${ddlFile} without database context"
 
-		   	# In DEBUG mode, show the DDL file
-			if [ "$LOG_LEVEL" == "DEBUG" ]; then
-				logDebug "Running bare DDL file, ${ddlFile}:"
-				cat "$ddlFile"
-			fi
-
-			cat "$ddlFile" | executeSQL \
-				--batch
+			executeSQL --batch <"$ddlFile"
 			commandExitCode=$?
 
 			if [ $commandExitCode -eq 0 ]; then
@@ -1015,6 +1018,39 @@ function rollbackDDLsOnInterrupt {
 	exit 0
 }
 trap rollbackDDLsOnInterrupt SIGINT
+
+# When not provided, derive the correct database client command
+if [ -z "$_sqlCommand" ]; then
+	if $_isDevelopmentStage; then
+		_sqlCommand=$(executeComposeCommand which mysql 2>/dev/null)
+	else
+		_sqlCommand=$(which mysql 2>/dev/null)
+	fi
+
+	# Check if mysql command was found and is not deprecated
+	if [ -n "$_sqlCommand" ]; then
+		# Check for a deprecation warning
+		if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated"; then
+			_sqlCommand=''
+		fi
+	fi
+
+	# If mysql is not available or deprecated, use mariadb instead
+	if [ -z "$_sqlCommand" ]; then
+		if $_isDevelopmentStage; then
+			_sqlCommand=$(executeComposeCommand which mariadb 2>/dev/null)
+		else
+			_sqlCommand=$(which mariadb 2>/dev/null)
+		fi
+	fi
+
+	# If still empty, exit with error
+	if [ -z "$_sqlCommand" ]; then
+		errorOut 3 "No mysql or mariadb client found!  Please install mysql-client or mariadb (client) to the ${_databaseHost} container."
+	fi
+
+	logDebug "Detected SQL command: $_sqlCommand"
+fi
 
 # Get the present schema version
 presentVersion=$(getPresentSchemaVersion)

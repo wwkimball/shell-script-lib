@@ -9,7 +9,7 @@ fi
 
 # Constants
 _myDir="${BASH_SOURCE[0]%/*}"
-_myVersion="2025.06.26-1"
+_myVersion="2025.06.27-1"
 readonly _myDir _myVersion
 
 # Logging facility

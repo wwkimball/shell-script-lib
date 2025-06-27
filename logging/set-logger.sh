@@ -177,6 +177,15 @@ function logDebug {
 }
 
 ###
+# Prints an DEBUG message to STDERR
+##
+function logDebugToError {
+	if [ "$LOG_LEVEL" == "DEBUG" ]; then
+		echo -e "$(_echoPrefixDebug) $@" >&2
+	fi
+}
+
+###
 # Prints and ERROR message and abends the process with an exit code
 ##
 function errorOut {

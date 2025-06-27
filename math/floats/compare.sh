@@ -1,4 +1,4 @@
-###############################################################################
+################################################################################
 # Defines a function, compareFloats, which compares two floating point numbers.
 #
 # Copyright 2001, 2018, 2025 William W. Kimball, Jr. MBA MSIS

@@ -528,12 +528,13 @@ for buildService in "${buildServices[@]}"; do
 	logLine "Deleting old image versions of ${longDockerImageName}..."
 	declare -a purgeIDs=($(\
 		docker images \
-			--format="{{.ID}}" \
-			--filter="before=${longDockerImageName}:latest" \
+			--format="{{.ID}} {{.Tag}}" \
 			"${longDockerImageName}:*" \
-		| uniq
+		| grep -v ":latest$" \
+		| grep -v ":${dockerImageVersion}$" \
+		| awk '{print $1}'
 	))
-	if [ 0 -lt ${#purgeIDs} ]; then
+	if [ 0 -lt ${#purgeIDs[@]} ]; then
 		logLine "Deleting old image versions of ${longDockerImageName}:  ${purgeIDs[*]}"
 		echo "${purgeIDs[*]}" | xargs docker rmi --force
 	fi

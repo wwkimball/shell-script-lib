@@ -374,6 +374,17 @@ EOR
 				errorOut 9 "Failed to register ${destinationFile} on ${deployToHost}!" >&2
 			fi
 		done < <(tr \\t \\a <"$imageIDFile")
+	else
+		# Pull the image from the Docker Registry
+		logLine "Pulling the image from the Docker Registry on ${deployToHost}..."
+		silentSsh "${deployToHost}" <<-EOS
+			cd "${_destinationDir}"
+			./compose.sh --stage ${_deployStage} pull
+			exit \$?
+EOS
+		if [ 0 -ne $? ]; then
+			errorOut 9 "Failed to pull the image from the Docker Registry on ${deployToHost}!" >&2
+		fi
 	fi
 
 	# Optionally start the service stack

@@ -526,13 +526,19 @@ for buildService in "${buildServices[@]}"; do
 
 	# Delete all old versions of the new image
 	logLine "Deleting old image versions of ${longDockerImageName}..."
+
+	# Get the current image ID to avoid deleting it
+	currentImageID=$(docker images --format="{{.ID}}" "${dockerImageRef}")
+
 	declare -a purgeIDs=($(\
 		docker images \
 			--format="{{.ID}} {{.Tag}}" \
 			"${longDockerImageName}:*" \
 		| grep -v ":latest$" \
 		| grep -v ":${dockerImageVersion}$" \
-		| awk '{print $1}'
+		| awk '{print $1}' \
+		| sort -u \
+		| grep -v "^${currentImageID}$"
 	))
 	if [ 0 -lt ${#purgeIDs[@]} ]; then
 		logLine "Deleting old image versions of ${longDockerImageName}:  ${purgeIDs[*]}"

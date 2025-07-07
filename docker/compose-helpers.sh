@@ -283,7 +283,7 @@ function dynamicBakeComposeFile() {
 			return 3
 		fi
 	else
-		dockerCompose "$mainComposeFile" \
+		dockerCompose "$mainComposeFile" '' \
 			--env-file "$mainEnvFile" --env-file "$overrideEnvFile" \
 			--profile "$profileName" \
 			config >"$tempComposeFile"

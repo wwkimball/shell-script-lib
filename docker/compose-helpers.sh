@@ -216,8 +216,8 @@ function bakeComposeFile() {
 ##
 function dynamicBakeComposeFile() {
 	local outputFile profileName sourceDirectory mainComposeFile \
-		overrideComposeFile mainEnvFile overrideEnvFile tempComposeFile \
-		tempEnvFile altMainComposeFile altOverrideComposeFile
+		overrideComposeFile mainEnvFile overrideEnvFile tempEnvFile \
+		altMainComposeFile altOverrideComposeFile returnState
 	outputFile=${1:?"ERROR:  ${FUNCNAME[0]}:  Missing output file name."}
 	profileName=${2:-"development"}
 	sourceDirectory=${3:-"docker"}
@@ -225,6 +225,7 @@ function dynamicBakeComposeFile() {
 	overrideComposeFile="${sourceDirectory}/docker-compose.${profileName}.yaml"
 	mainEnvFile="${sourceDirectory}/.env"
 	overrideEnvFile="${sourceDirectory}/.env.${profileName}"
+	returnState=0
 
 	if [ ! -f "$mainComposeFile" ]; then
 		# Allow for the incorrect ".yml" extension
@@ -255,185 +256,31 @@ function dynamicBakeComposeFile() {
 		overrideEnvFile=''
 	fi
 
-	# Either, neither, or both of the environment variable files may be present.
-	# Whatever the case may be, we will use a temporary file to capture the
-	# environment variables from any files that are present.
-	declare -a envFiles=()
-	tempComposeFile=$(mktemp)
-	trap "rm -f '$tempComposeFile'" EXIT
+	# Either, neither, or both of the environment variable files may be
+	# present.  Simplify the logic by creating a temporary file to hold the
+	# environment variables to be used.
+	tempEnvFile=$(mktemp)
+	trap "rm -f '$tempEnvFile'" EXIT
 
-	# Merge the environment variables from the base and override files;  Docker
-	# Compose enforces a precedence order such that later entries in env_files
-	# override earlier files.  The ideal order is:  base, override, service.
-	if [ -n "$mainEnvFile" ]; then
-		envFiles+=("$mainEnvFile")
-	fi
-	if [ -n "$overrideEnvFile" ]; then
-		envFiles+=("$overrideEnvFile")
+	# Merge the environment variables from the base and override files
+	echo "# Environment variables for ${profileName} environment" >"$tempEnvFile"
+	if [ ! -z "$mainEnvFile" ]; then
+		cat "$mainEnvFile" >>"$tempEnvFile"
 	fi
 
-	# Identify whether any profiles have been defined in either of the compose
-	# files.  If so, we will use the profile name to filter the services in
-	# the compose files.  If not, we will ignore the profile name and bake
-	# the entire compose file.
-	declare -a profileArgs=()
-	local useProfiles=false
-	yaml-get --query 'services.*.profiles' "$mainComposeFile" >/dev/null 2>&1
-	if [ $? -eq 0 ]; then
-		useProfiles=true
-	fi
-	if ! $useProfiles && [ -n "$overrideComposeFile" ]; then
-		yaml-get --query 'services.*.profiles' "$overrideComposeFile" >/dev/null 2>&1
-		if [ $? -eq 0 ]; then
-			useProfiles=true
-		fi
-	fi
-	if $useProfiles; then
-		# At least one of the compose files has profiles defined, so we will
-		# use the profile name to filter the services in the compose files.
-		if [ -n "$profileName" ]; then
-			profileArgs=( --profile $profileName )
-		else
-			echo "ERROR:  ${FUNCNAME[0]}:  No profile name provided, but profiles are defined in the main compose file!" >&2
-			return 1
-		fi
-	else
-		# No profiles are defined in the main compose file, so we will ignore
-		# the profile name and bake the entire compose file.
-		profileName=''
+	if [ ! -z "$overrideEnvFile" ]; then
+		cat "$overrideEnvFile" >>"$tempEnvFile"
 	fi
 
-	# Start by merging the main and override (if present) compose files
-	if [ -f "$overrideComposeFile" ]; then
-		dockerCompose "$mainComposeFile" "$overrideComposeFile" \
-			--env-file "$mainEnvFile" --env-file "$overrideEnvFile" \
-			"${profileArgs[@]}" \
-			config >"$tempComposeFile"
-		if [ $? -ne 0 ]; then
-			echo "ERROR:  ${FUNCNAME[0]}:  Failed to merge compose files ${overrideComposeFile} into ${mainComposeFile} for profile, ${profileName}!" >&2
-			return 3
-		fi
-	else
-		dockerCompose "$mainComposeFile" '' \
-			--env-file "$mainEnvFile" --env-file "$overrideEnvFile" \
-			"${profileArgs[@]}" \
-			config >"$tempComposeFile"
-		if [ $? -ne 0 ]; then
-			echo "ERROR:  ${FUNCNAME[0]}:  Failed to pull configuration from ${mainComposeFile} for profile, ${profileName}!" >&2
-			return 4
-		fi
-	fi
-
-	# Then, look at each service in the merged compose file and ensure that
-	# there is an env_file entry for the environment variables file.  Any
-	# existing value can take one of three forms:
-	# 1. It may not exist at all, in which case we will add it.
-	# 2. It may be a string, in which case we will convert it to an array and
-	#    append the temporary environment variables file to it.
-	# 3. It may be an array, in which case we will append the temporary
-	#    environment variables file to it.
-	# In cases where there is already an env_file entry, we must deduplicate it
-	# against our envFiles array, so that we do not add the same file multiple
-	# times.  Further, any existing env_file entries must follow our envFiles
-	# entries in order to preserve the precedence order of the environment
-	# variables.
-	serviceNames=$(yaml-get --query 'services.*.[name()]' "$tempComposeFile")
-	for serviceName in $serviceNames; do
-		# Get the current env_file entry for the service, if it exists.  This
-		# command will return an empty string and an exit code of 1 when the
-		# service does not have an env_file entry.
-		envFileEntries=$(yaml-get --query "services.${serviceName}.env_file" "$tempComposeFile" 2>/dev/null)
-		if [ $? -ne 0 ] || [ -z "$envFileEntries" ]; then
-			# No env_file entry, so add one with the entries we've found
-			# in the envFiles array.  Because we mean to add a complex data
-			# type, we must use yaml-merge, feeding it a JSON string
-			# representing the array of environment files.
-			jsonArray='[ '
-			for envFile in "${envFiles[@]}"; do
-				if [ -f "$envFile" ]; then
-					jsonArray+='"'$(echo "$envFile" | sed 's/"/\\"/g')'", '
-				fi
-			done
-			jsonArray="${jsonArray%, } ]" # Remove the trailing comma and space
-			echo "$jsonArray" | yaml-merge \
-				--mergeat "services.${serviceName}.env_file" \
-				--overwrite "$tempComposeFile" \
-				--nostdin \
-				"$tempComposeFile" -
-			if [ $? -ne 0 ]; then
-				echo "ERROR:  ${FUNCNAME[0]}:  Failed to add env_file entry for service ${serviceName}!" >&2
-				return 5
-			fi
-			continue
-		fi
-
-		# If we get here, the service has an env_file entry, so we need to check
-		# whether it is a string or an array.  If it is a string, we will have
-		# to convert it to an array.  Once we have an array, we must deduplicate
-		# it against the envFiles array, so that we do not add the same file
-		# multiple times.  Array values start with an opening square bracket.
-		declare -a serviceEnvFiles=()
-		if [[ "$envFileEntries" == \[* ]]; then
-			# The env_file entry is an array
-			serviceEnvFiles=($(echo "$envFileEntries" | sed 's/^\[\(.*\)\]$/\1/' | tr ',' '\n' | sed 's/^\s*//;s/\s*$//'))
-		else
-			# The value is a string, so we must convert it to an array
-			serviceEnvFiles=("$envFileEntries")
-		fi
-
-		# Compose a new array of environment files, starting with the general
-		# envFiles array, then appending the service's env_file entries, but
-		# deduplicating against the envFiles array.  This ensures that the
-		# precedence order of the environment variables is preserved, with the
-		# envFiles entries coming first, followed by the service's env_file
-		# entries.
-		#
-		# Start by copying the envFiles array into a new array, then as long as
-		# the serviceEnvFiles array has entries, append unique entries to the
-		# new array.
-		declare -a newEnvFiles=("${envFiles[@]}")
-		for serviceEnvFile in "${serviceEnvFiles[@]}"; do
-			# Remove leading and trailing whitespace from the service env_file
-			serviceEnvFile=$(echo "$serviceEnvFile" | sed 's/^\s*//;s/\s*$//')
-			# Check whether the service env_file is already in the new array
-			if [[ ! " ${newEnvFiles[*]} " =~ " ${serviceEnvFile} " ]]; then
-				newEnvFiles+=("$serviceEnvFile")
-			fi
-		done
-
-		# Now we have a new array of environment files, so we can convert it to
-		# a JSON string and merge it into the compose file.  Note that we must
-		# use yaml-merge to append the new env_file entry, because it is a
-		# complex data type (an array) and we want to preserve the precedence
-		# order of the environment variables.
-		jsonArray='[ '
-		for envFile in "${newEnvFiles[@]}"; do
-			if [ -f "$envFile" ]; then
-				jsonArray+='"'$(echo "$envFile" | sed 's/"/\\"/g')'", '
-			fi
-		done
-		jsonArray="${jsonArray%, } ]" # Remove the trailing comma and space
-		echo "$jsonArray" | yaml-merge \
-			--mergeat "services.${serviceName}.env_file" \
-			--overwrite "$tempComposeFile" \
-			--nostdin \
-			"$tempComposeFile" -
-		if [ $? -ne 0 ]; then
-			echo "ERROR:  ${FUNCNAME[0]}:  Failed to update env_file entry for service ${serviceName}!" >&2
-			return 6
-		fi
-	done
-
-	# Bake the Docker Compose file and clean up
-	dockerCompose "$tempComposeFile" '' \
-		"${profileArgs[@]}" \
+	# Bake the Docker Compose file
+	dockerCompose "$mainComposeFile" "$overrideComposeFile" \
+		--profile "$profileName" \
+		--env-file "$tempEnvFile" \
 		config >"$outputFile"
-	if [ $? -ne 0 ]; then
-		echo "ERROR:  ${FUNCNAME[0]}:  Failed to pull configuration from ${mainComposeFile} for profile, ${profileName}!" >&2
-		return 7
-	fi
+	returnState=$?
 
-	rm -f "$tempComposeFile"
+	rm -f "$tempEnvFile"
+	return $returnState
 }
 
 ###

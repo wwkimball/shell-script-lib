@@ -277,10 +277,20 @@ function dynamicBakeComposeFile() {
 	# the compose files.  If not, we will ignore the profile name and bake
 	# the entire compose file.
 	declare -a profileArgs=()
+	local useProfiles=false
 	yaml-get --query 'services.*.profiles' "$mainComposeFile" >/dev/null 2>&1
 	if [ $? -eq 0 ]; then
-		# Profiles are defined in the main compose file, so we will use the
-		# profile name to filter the services in the compose files.
+		useProfiles=true
+	fi
+	if ! $useProfiles && [ -n "$overrideComposeFile" ]; then
+		yaml-get --query 'services.*.profiles' "$overrideComposeFile" >/dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			useProfiles=true
+		fi
+	fi
+	if $useProfiles; then
+		# At least one of the compose files has profiles defined, so we will
+		# use the profile name to filter the services in the compose files.
 		if [ -n "$profileName" ]; then
 			profileArgs=( --profile $profileName )
 		else

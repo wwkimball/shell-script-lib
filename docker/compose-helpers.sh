@@ -272,11 +272,32 @@ function dynamicBakeComposeFile() {
 		envFiles+=("$overrideEnvFile")
 	fi
 
+	# Identify whether any profiles have been defined in either of the compose
+	# files.  If so, we will use the profile name to filter the services in
+	# the compose files.  If not, we will ignore the profile name and bake
+	# the entire compose file.
+	declare -a profileArgs=()
+	yaml-get --query 'services.*.profiles' "$mainComposeFile" >/dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		# Profiles are defined in the main compose file, so we will use the
+		# profile name to filter the services in the compose files.
+		if [ -n "$profileName" ]; then
+			profileArgs=( --profile $profileName )
+		else
+			echo "ERROR:  ${FUNCNAME[0]}:  No profile name provided, but profiles are defined in the main compose file!" >&2
+			return 1
+		fi
+	else
+		# No profiles are defined in the main compose file, so we will ignore
+		# the profile name and bake the entire compose file.
+		profileName=''
+	fi
+
 	# Start by merging the main and override (if present) compose files
 	if [ -f "$overrideComposeFile" ]; then
 		dockerCompose "$mainComposeFile" "$overrideComposeFile" \
 			--env-file "$mainEnvFile" --env-file "$overrideEnvFile" \
-			--profile "$profileName" \
+			"${profileArgs[@]}" \
 			config >"$tempComposeFile"
 		if [ $? -ne 0 ]; then
 			echo "ERROR:  ${FUNCNAME[0]}:  Failed to merge compose files ${overrideComposeFile} into ${mainComposeFile} for profile, ${profileName}!" >&2
@@ -285,7 +306,7 @@ function dynamicBakeComposeFile() {
 	else
 		dockerCompose "$mainComposeFile" '' \
 			--env-file "$mainEnvFile" --env-file "$overrideEnvFile" \
-			--profile "$profileName" \
+			"${profileArgs[@]}" \
 			config >"$tempComposeFile"
 		if [ $? -ne 0 ]; then
 			echo "ERROR:  ${FUNCNAME[0]}:  Failed to pull configuration from ${mainComposeFile} for profile, ${profileName}!" >&2
@@ -395,7 +416,7 @@ function dynamicBakeComposeFile() {
 
 	# Bake the Docker Compose file and clean up
 	dockerCompose "$tempComposeFile" '' \
-		--profile "$profileName" \
+		"${profileArgs[@]}" \
 		config >"$outputFile"
 	if [ $? -ne 0 ]; then
 		echo "ERROR:  ${FUNCNAME[0]}:  Failed to pull configuration from ${mainComposeFile} for profile, ${profileName}!" >&2

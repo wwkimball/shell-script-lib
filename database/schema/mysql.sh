@@ -29,20 +29,21 @@
 #
 # Usage:
 #   export MYSQL_PASSWORD='<Your admin password>'
-#   ./postgresql.sh [target-version]
+#   ./mysql.sh [target-version]
 #   unset MYSQL_PASSWORD
 #
 # Example:  Just update the schema to the latest version
-#   ./postgresql.sh
+#   ./mysql.sh
 #
 # Example:  Update the schema to a specific version
-#   ./postgresql.sh 20250512-3
+#   ./mysql.sh 20250512-3
 #
 # Example:  Downgrade the schema to a specific version
-#   ./postgresql.sh --force 20250510-1
+#   ./mysql.sh --force 20250510-1
 #
-# Example:  Destroy the schema and start over
-#   ./postgresql.sh --force 00000000-0 && ./postgresql.sh
+# Example:  Destroy the schema and start over, assuming your rollback files will
+#           cleanly handle the downgrade.
+#   ./mysql.sh --force 00000000-0 && ./mysql.sh
 #
 # Copyright 2025 William W. Kimball, Jr. MBA MSIS
 ################################################################################

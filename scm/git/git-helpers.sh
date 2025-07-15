@@ -10,7 +10,7 @@ fi
 # This is an import helper; just import the various function definitions
 # from the other files in the git directory.
 _thisDir="${BASH_SOURCE[0]%/*}"
-_functionsDir="${_thisDir}/function"
+_functionsDir="${_thisDir}/functions"
 for _funcFile in "${_functionsDir}"/*.sh; do
 	source "$_funcFile"
 done

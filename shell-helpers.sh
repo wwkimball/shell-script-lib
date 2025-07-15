@@ -47,3 +47,9 @@ if ! source "${_myDir}/versioning/release-helpers.sh"; then
 	echo "ERROR:  Unable to source ${_myDir}/versioning/release-helpers.sh" >&2
 	exit 2
 fi
+
+# SCM helpers
+if ! source "${_myDir}/scm/scm-helpers.sh"; then
+	echo "ERROR:  Unable to source ${_myDir}/scm/scm-helpers.sh" >&2
+	exit 2
+fi

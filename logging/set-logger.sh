@@ -22,13 +22,13 @@ if [ -z "${BASH_SOURCE[1]}" ]; then
 fi
 
 # Avoid repeated loading of this library
-if [ -n "$__LIB_LOGGER_LOADED" ]; then
+if [ -n "${__LIB_LOGGER_LOADED:-}" ]; then
 	return 0
 fi
 __LIB_LOGGER_LOADED=true
 
 # Set the default logging level
-if [ -z "$LOG_LEVEL" ]; then
+if [ -z "${LOG_LEVEL:-}" ]; then
 	LOG_LEVEL="INFO"
 fi
 

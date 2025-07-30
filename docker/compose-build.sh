@@ -495,18 +495,60 @@ for buildService in "${buildServices[@]}"; do
 	if [ -f "$buildPostServiceScript" ]; then
 		logInfo "Running post-build script, ${buildPostServiceScript}, in the ${buildService} container..."
 
-		# Start the container to run the script
-		if ! dockerCompose "$bakedComposeFile" "" \
-			--profile "$_deployStage" \
-			up --detach ${buildService}
-		then
-			errorOut 12 "Failed to start the ${buildService} container!"
-		fi
-		_servicesRunning=true
-		cat "$buildPostServiceScript" | dockerCompose "$bakedComposeFile" "" \
-			--profile "$_deployStage" \
-			exec ${buildService} /bin/bash -s
+		# Extract service configuration from the baked compose file
+		serviceImagePath="services.${buildService}.image"
+		serviceImage=$(yaml-get --nostdin --query="$serviceImagePath" "$bakedComposeFile")
 		if [ 0 -ne $? ]; then
+			errorOut 12 "Failed to get image name for service ${buildService} from ${bakedComposeFile}!"
+		fi
+
+		# Build docker run arguments from compose configuration
+		declare -a dockerRunArgs=()
+		dockerRunArgs+=(--rm)  # Remove container when it exits
+		dockerRunArgs+=(--interactive)  # Keep STDIN open for script input
+
+		# Extract and add environment variables
+		envVarsPath="services.${buildService}.environment"
+		if yaml-get --nostdin --query="$envVarsPath" "$bakedComposeFile" >/dev/null 2>&1; then
+			while IFS= read -r envVar; do
+				if [[ "$envVar" =~ ^[^=]+= ]]; then
+					# Environment variable with value
+					dockerRunArgs+=(--env "$envVar")
+				else
+					# Environment variable name only (inherit from host)
+					dockerRunArgs+=(--env "$envVar")
+				fi
+			done < <(yaml-get --nostdin --query="$envVarsPath.*" "$bakedComposeFile" 2>/dev/null | grep -v "^$")
+		fi
+
+		# Extract and add env_file entries
+		envFilePath="services.${buildService}.env_file"
+		if yaml-get --nostdin --query="$envFilePath" "$bakedComposeFile" >/dev/null 2>&1; then
+			while IFS= read -r envFile; do
+				if [ -n "$envFile" ] && [ -f "${DOCKER_DIRECTORY}/${envFile}" ]; then
+					dockerRunArgs+=(--env-file "${DOCKER_DIRECTORY}/${envFile}")
+				fi
+			done < <(yaml-get --nostdin --query="$envFilePath.*" "$bakedComposeFile" 2>/dev/null)
+		fi
+
+		# Extract and mount secrets
+		secretsPath="services.${buildService}.secrets"
+		if yaml-get --nostdin --query="$secretsPath" "$bakedComposeFile" >/dev/null 2>&1; then
+			while IFS= read -r secretName; do
+				if [ -n "$secretName" ]; then
+					# Get secret file path from the secrets section
+					secretFilePath=$(yaml-get --nostdin --query="secrets.${secretName}.file" "$bakedComposeFile" 2>/dev/null)
+					if [ -n "$secretFilePath" ] && [ -f "${DOCKER_DIRECTORY}/${secretFilePath}" ]; then
+						dockerRunArgs+=(--mount "type=bind,source=${DOCKER_DIRECTORY}/${secretFilePath},target=/run/secrets/${secretName},readonly")
+					fi
+				fi
+			done < <(yaml-get --nostdin --query="$secretsPath.*" "$bakedComposeFile" 2>/dev/null)
+		fi
+
+		# Run the test script in a disposable container
+		if cat "$buildPostServiceScript" | docker run "${dockerRunArgs[@]}" "$serviceImage" /bin/sh -s; then
+			logInfo "Post-build script completed successfully."
+		else
 			errorOut 13 "Failed to run the post-build script, ${buildPostServiceScript}, in the ${buildService} container!"
 		fi
 	fi

@@ -10,12 +10,12 @@ fi
 ###
 # Bake Docker Compose configuration files for a named profile, dynamically.
 #
-# Similar to bakeComposeFile(), but this function dynamically identifies the
-# base and override files based on a given source directory to look in along
-# with an identifier to seek as part of the filenames.  This is useful for
-# baking configuration files for a specific environment, such as "development"
-# "production", and so on but without having to hard-code the filenames and
-# independenty identify whether any/all of the files exist.
+# This function dynamically identifies the base and override files based on a
+# given source directory to look in along with an identifier to seek as part
+# of the filenames.  This is useful for baking configuration files for a
+# specific environment, such as "development", "production", and so on but
+# without having to hard-code the filenames and independently identify
+# whether any/all of the files exist.
 #
 # The identifier will be sought by injecting it before the .yaml extension of
 # the compose file, but after ".env" for the environment file.  The base
@@ -40,15 +40,13 @@ fi
 ##
 function dynamicBakeComposeFile() {
 	local outputFile profileName sourceDirectory mainComposeFile \
-		overrideComposeFile mainEnvFile overrideEnvFile tempEnvFile \
-		altMainComposeFile altOverrideComposeFile returnState
+		overrideComposeFile tempEnvFile altMainComposeFile \
+		altOverrideComposeFile returnState
 	outputFile=${1:?"ERROR:  ${FUNCNAME[0]}:  Missing output file name."}
 	profileName=${2:-"development"}
 	sourceDirectory=${3:-"docker"}
 	mainComposeFile="${sourceDirectory}/docker-compose.yaml"
 	overrideComposeFile="${sourceDirectory}/docker-compose.${profileName}.yaml"
-	mainEnvFile="${sourceDirectory}/.env"
-	overrideEnvFile="${sourceDirectory}/.env.${profileName}"
 	returnState=0
 
 	if [ ! -f "$mainComposeFile" ]; then
@@ -72,29 +70,12 @@ function dynamicBakeComposeFile() {
 		fi
 	fi
 
-	if [ ! -f "$mainEnvFile" ]; then
-		mainEnvFile=''
-	fi
-
-	if [ ! -f "$overrideEnvFile" ]; then
-		overrideEnvFile=''
-	fi
-
 	# Either, neither, or both of the environment variable files may be
-	# present.  Simplify the logic by creating a temporary file to hold the
-	# environment variables to be used.
+	# present.  Further, there may be any number of additional service-specific
+	# environment variable files to consider.  Simplify the logic by creating a
+	# temporary file to hold the environment variables to be used.
 	tempEnvFile=$(mktemp)
-	trap "rm -f '$tempEnvFile'" EXIT
-
-	# Merge the environment variables from the base and override files
-	echo "# Environment variables for ${profileName} environment" >"$tempEnvFile"
-	if [ ! -z "$mainEnvFile" ]; then
-		cat "$mainEnvFile" >>"$tempEnvFile"
-	fi
-
-	if [ ! -z "$overrideEnvFile" ]; then
-		cat "$overrideEnvFile" >>"$tempEnvFile"
-	fi
+	dynamicMergeEnvFiles "$tempEnvFile" "$sourceDirectory" "$profileName"
 
 	# Bake the Docker Compose file
 	dockerCompose "$mainComposeFile" "$overrideComposeFile" \

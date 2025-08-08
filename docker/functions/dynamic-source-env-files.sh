@@ -50,99 +50,21 @@ unset setLoggerSource
 function dynamicSourceEnvFiles() {
 	local dockerDir=${1:?"ERROR:  The Docker files directory must be provided as the first positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${2:?"ERROR:  The deployment stage must be provided as the second positional argument to ${FUNCNAME[0]}"}
-	local envFile envFiles mergedComposeFile serviceNames returnCode=1
+	local envFile returnCode
+	declare -a envFiles
 	shift 2
 
-	# Track the environment variable files to source
-	declare -a envFiles=(
-		"${dockerDir}/.env"
-		"${dockerDir}/.env.${deploymentStage}"
-	)
-
-	# Because environment variables are often used in the Docker Compose YAML
-	# files, Docker Compose often errors out when they haven't yet been sourced
-	# before attempting to use them.  As such, we cannot rely on Docker Compose
-	# to merge these files automatically.  So, we will use the yaml-merge
-	# command, which does not depend on environment variables to merge YAML
-	# content.  First, identify the base docker-compose.yaml (or .yml) file and
-	# whether a deployment stage override is also available.
-	local baseFileName=docker-compose.yaml
-	local overrideFileName="docker-compose.${deploymentStage}.yaml"
-	local soleComposeFile=""
-	local composeFileTally=0
-	declare -a mergeArgs=(--no-stdin)
-
-	# Use a temp file for the merge results
-	mergedComposeFile=$(mktemp)
-	mergeArgs+=(--overwrite)
-	mergeArgs+=("$mergedComposeFile")
-
-	if [ ! -f "${dockerDir}/${baseFileName}" ]; then
-		baseFileName=docker-compose.yml
-	fi
-	if [ -f "${dockerDir}/${baseFileName}" ]; then
-		((composeFileTally++))
-		soleComposeFile="${dockerDir}/${baseFileName}"
-		mergeArgs+=("$soleComposeFile")
-	fi
-	if [ ! -f "${dockerDir}/${overrideFileName}" ]; then
-		overrideFileName="docker-compose.${deploymentStage}.yml"
-	fi
-	if [ -f "${dockerDir}/${overrideFileName}" ]; then
-		((composeFileTally++))
-		soleComposeFile="${dockerDir}/${overrideFileName}"
-		mergeArgs+=("$soleComposeFile")
-	fi
-
-	# Merge only when there is more than one compose file
-	local hasComposeFiles=false
-	case "$composeFileTally" in
-		0)	logWarning "No Docker Compose files found." ;;
-
-		1)	hasComposeFiles=true
-			if ! cp "$soleComposeFile" "$mergedComposeFile"; then
-				logError "Failed to copy ${soleComposeFile} to ${mergedComposeFile}"
-				return 3
-			fi
-		;;
-
-		2)	hasComposeFiles=true
-			yaml-merge "${mergeArgs[@]}"
-		;;
-	esac
-
-	# Extract service names from the merged Docker Compose file and look for
-	# environment variable files matching those names.
-	serviceNames=$(yaml-get --query='services.*[name()]' "$mergedComposeFile" 2>/dev/null)
-	for serviceName in $serviceNames; do
-		soleComposeFile="${dockerDir}/.env.${serviceName}"
-		if [ -f "$soleComposeFile" ]; then
-			envFiles+=("$soleComposeFile")
+	# Discover all relevant environment files
+	if ! discoverEnvFiles envFiles "$dockerDir" "$deploymentStage" "$@"; then
+		returnCode=$?
+		if [ "$returnCode" -eq 1 ]; then
+			logWarning "No environment files found to source."
 		fi
-		soleComposeFile="${dockerDir}/.env.${serviceName}.${deploymentStage}"
-		if [ -f "$soleComposeFile" ]; then
-			envFiles+=("$soleComposeFile")
-		fi
-	done
-
-	# Any remaining arguments are presumed to be relative environment
-	# variable files, which will override anything that will have been sourced
-	# up to this point.
-	for envFile in "$@"; do
-		# When there are no path seperators in the value, prepend the Docker
-		# directory to the value.
-		if [[ "$envFile" != /* ]]; then
-			envFile="${dockerDir}/${envFile}"
-		fi
-
-		if [ -f "$envFile" ]; then
-			envFiles+=("$envFile")
-		else
-			logWarning "Environment variable file not found:  $envFile"
-		fi
-	done
+		return $returnCode
+	fi
 
 	# Attempt to source all discovered environment variable files
+	returnCode=1
 	for envFile in "${envFiles[@]}"; do
 		if [ -f "$envFile" ]; then
 			# Indicate that at least one file has been found when, so far, none
@@ -160,11 +82,6 @@ function dynamicSourceEnvFiles() {
 			logWarning "Environment variable file not found:  $envFile"
 		fi
 	done
-
-	# Destroy the temp file should it still exist
-	if [ -f "$mergedComposeFile" ]; then
-		rm -f "$mergedComposeFile"
-	fi
 
 	return $returnCode
 }

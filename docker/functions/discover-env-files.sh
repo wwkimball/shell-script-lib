@@ -51,14 +51,19 @@ function discoverEnvFiles() {
 	local -n envFilesRef=$1
 	local dockerDir=${2:?"ERROR:  The Docker files directory must be provided as the second positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${3:?"ERROR:  The deployment stage must be provided as the third positional argument to ${FUNCNAME[0]}"}
-	local envFile mergedComposeFile serviceNames returnCode=1
+	local envFile mergedComposeFile serviceNames evalFile="" returnCode=1
 	shift 3
 
 	# Track the environment variable files to discover
-	envFilesRef=(
-		"${dockerDir}/.env"
-		"${dockerDir}/.env.${deploymentStage}"
-	)
+	envFilesRef=()
+	evalFile="${dockerDir}/.env"
+	if [ -f "$evalFile" ]; then
+		envFilesRef+=("$evalFile")
+	fi
+	evalFile="${dockerDir}/.env.${deploymentStage}"
+	if [ -f "$evalFile" ]; then
+		envFilesRef+=("$evalFile")
+	fi
 
 	# Because environment variables are often used in the Docker Compose YAML
 	# files, Docker Compose often errors out when they haven't yet been sourced
@@ -69,7 +74,6 @@ function discoverEnvFiles() {
 	# whether a deployment stage override is also available.
 	local baseFileName=docker-compose.yaml
 	local overrideFileName="docker-compose.${deploymentStage}.yaml"
-	local soleComposeFile=""
 	local composeFileTally=0
 	declare -a mergeArgs=(--nostdin)
 
@@ -83,16 +87,16 @@ function discoverEnvFiles() {
 	fi
 	if [ -f "${dockerDir}/${baseFileName}" ]; then
 		((composeFileTally++))
-		soleComposeFile="${dockerDir}/${baseFileName}"
-		mergeArgs+=("$soleComposeFile")
+		evalFile="${dockerDir}/${baseFileName}"
+		mergeArgs+=("$evalFile")
 	fi
 	if [ ! -f "${dockerDir}/${overrideFileName}" ]; then
 		overrideFileName="docker-compose.${deploymentStage}.yml"
 	fi
 	if [ -f "${dockerDir}/${overrideFileName}" ]; then
 		((composeFileTally++))
-		soleComposeFile="${dockerDir}/${overrideFileName}"
-		mergeArgs+=("$soleComposeFile")
+		evalFile="${dockerDir}/${overrideFileName}"
+		mergeArgs+=("$evalFile")
 	fi
 
 	# Merge only when there is more than one compose file
@@ -101,8 +105,8 @@ function discoverEnvFiles() {
 		0)	logWarning "No Docker Compose files found." ;;
 
 		1)	hasComposeFiles=true
-			if ! cp "$soleComposeFile" "$mergedComposeFile"; then
-				logError "Failed to copy ${soleComposeFile} to ${mergedComposeFile}"
+			if ! cp "$evalFile" "$mergedComposeFile"; then
+				logError "Failed to copy ${evalFile} to ${mergedComposeFile}"
 				return 3
 			fi
 		;;
@@ -116,13 +120,13 @@ function discoverEnvFiles() {
 	# environment variable files matching those names.
 	serviceNames=$(yaml-get --query='services.*[name()]' "$mergedComposeFile" 2>/dev/null)
 	for serviceName in $serviceNames; do
-		soleComposeFile="${dockerDir}/.env.${serviceName}"
-		if [ -f "$soleComposeFile" ]; then
-			envFilesRef+=("$soleComposeFile")
+		evalFile="${dockerDir}/.env.${serviceName}"
+		if [ -f "$evalFile" ]; then
+			envFilesRef+=("$evalFile")
 		fi
-		soleComposeFile="${dockerDir}/.env.${serviceName}.${deploymentStage}"
-		if [ -f "$soleComposeFile" ]; then
-			envFilesRef+=("$soleComposeFile")
+		evalFile="${dockerDir}/.env.${serviceName}.${deploymentStage}"
+		if [ -f "$evalFile" ]; then
+			envFilesRef+=("$evalFile")
 		fi
 	done
 

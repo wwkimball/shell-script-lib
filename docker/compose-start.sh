@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Start the Docker Compose stack for a given deployment stage.
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Run docker compose with an arbitrary command against baked configuration.
 #

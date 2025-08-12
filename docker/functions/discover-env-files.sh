@@ -52,6 +52,7 @@ function discoverEnvFiles() {
 	local dockerDir=${2:?"ERROR:  The Docker files directory must be provided as the second positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${3:?"ERROR:  The deployment stage must be provided as the third positional argument to ${FUNCNAME[0]}"}
 	local envFile mergedComposeFile serviceNames evalFile="" returnCode=1
+	local lcDeploymentStage=${deploymentStage,,}
 	shift 3
 
 	# Track the environment variable files to discover
@@ -60,7 +61,7 @@ function discoverEnvFiles() {
 	if [ -f "$evalFile" ]; then
 		envFilesRef+=("$evalFile")
 	fi
-	evalFile="${dockerDir}/.env.${deploymentStage}"
+	evalFile="${dockerDir}/.env.${lcDeploymentStage}"
 	if [ -f "$evalFile" ]; then
 		envFilesRef+=("$evalFile")
 	fi
@@ -73,7 +74,7 @@ function discoverEnvFiles() {
 	# content.  First, identify the base docker-compose.yaml (or .yml) file and
 	# whether a deployment stage override is also available.
 	local baseFileName=docker-compose.yaml
-	local overrideFileName="docker-compose.${deploymentStage}.yaml"
+	local overrideFileName="docker-compose.${lcDeploymentStage}.yaml"
 	local composeFileTally=0
 	declare -a mergeArgs=(--nostdin)
 
@@ -91,7 +92,7 @@ function discoverEnvFiles() {
 		mergeArgs+=("$evalFile")
 	fi
 	if [ ! -f "${dockerDir}/${overrideFileName}" ]; then
-		overrideFileName="docker-compose.${deploymentStage}.yml"
+		overrideFileName="docker-compose.${lcDeploymentStage}.yml"
 	fi
 	if [ -f "${dockerDir}/${overrideFileName}" ]; then
 		((composeFileTally++))
@@ -124,7 +125,7 @@ function discoverEnvFiles() {
 		if [ -f "$evalFile" ]; then
 			envFilesRef+=("$evalFile")
 		fi
-		evalFile="${dockerDir}/.env.${serviceName}.${deploymentStage}"
+		evalFile="${dockerDir}/.env.${serviceName}.${lcDeploymentStage}"
 		if [ -f "$evalFile" ]; then
 			envFilesRef+=("$evalFile")
 		fi

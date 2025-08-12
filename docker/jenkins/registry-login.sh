@@ -37,7 +37,7 @@ if [ -z "$DOCKER_REGISTRY_SOCKET" ] \
 	|| [ -z "$DOCKER_REGISTRY_PASSWORD" ]
 then
 	if [ -z "$DEPLOYMENT_STAGE" ]; then
-		errorOut 1 "ERROR:  DEPLOYMENT_STAGE must be set if any registry variables are not set."
+		errorOut 1 "ERROR:  DEPLOYMENT_STAGE must be when any of the following are not set:  DOCKER_REGISTRY_SOCKET, DOCKER_REGISTRY_USERNAME, DOCKER_REGISTRY_PASSWORD"
 	fi
 
 	# For each missing value, find the name of its registry variable for the

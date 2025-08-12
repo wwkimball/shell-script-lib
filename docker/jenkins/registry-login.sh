@@ -14,6 +14,12 @@
 #   - DOCKER_REGISTRY_USERNAME
 #   - DOCKER_REGISTRY_PASSWORD
 ################################################################################
+# The Jenkins WORKSPACE environment variable must be set
+if [ -z "$WORKSPACE" ] || [ ! -d "$WORKSPACE" ]; then
+	echo "ERROR:  The WORKSPACE environment variable must be set to a valid directory." >&2
+	exit 1
+fi
+
 # Derived constants
 LIB_DIR="${WORKSPACE}/lib"
 DOCKER_DIR="${WORKSPACE}/docker"
@@ -62,10 +68,16 @@ if [ -z "$DOCKER_REGISTRY_PASSWORD" ]; then
 fi
 
 # Log in to the Docker registry but suppress warnings about exposed credentials
+stdoutTarget=/dev/null
+if [[ ${LOG_LEVEL:-INFO} == "DEBUG" ]]; then
+	stdoutTarget=/dev/stdout
+fi
 echo "$DOCKER_REGISTRY_PASSWORD" | docker login \
 	--username "$DOCKER_REGISTRY_USERNAME" \
 	--password-stdin "$DOCKER_REGISTRY_SOCKET" \
-	>/dev/null
+	>$stdoutTarget
 if [ $? -ne 0 ]; then
 	errorOut 3 "Failed to log in to the Docker Registry."
 fi
+
+unset DOCKER_REGISTRY_PASSWORD DOCKER_REGISTRY_USERNAME DOCKER_REGISTRY_SOCKET

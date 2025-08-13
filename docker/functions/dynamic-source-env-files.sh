@@ -50,7 +50,7 @@ unset setLoggerSource
 function dynamicSourceEnvFiles() {
 	local dockerDir=${1:?"ERROR:  The Docker files directory must be provided as the first positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${2:?"ERROR:  The deployment stage must be provided as the second positional argument to ${FUNCNAME[0]}"}
-	local envFile returnCode
+	local envFile envVars envVar returnCode
 	declare -a envFiles
 	shift 2
 
@@ -74,10 +74,29 @@ function dynamicSourceEnvFiles() {
 			fi
 
 			logInfo "Sourcing environment variables from:  $envFile"
+
+			# Get the list of (valid) environment variables defined in this file
+			envVars=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$envFile" | cut -d'=' -f1 | sort -u)
+
+			# Skip the file when the list is empty
+			if [ -z "$envVars" ]; then
+				logWarning "No valid environment variables found in:  $envFile"
+				continue
+			fi
+
 			if ! source "$envFile"; then
 				logError "Failed to source environment variables from:  $envFile"
 				returnCode=2
+				continue
 			fi
+
+			# Export all variables that were defined in the environment file
+			for envVar in $envVars; do
+				if [[ -n "${!envVar}" ]]; then
+					export "$envVar"
+					logDebug "Exported environment variable:  ${envVar}=${!envVar}"
+				fi
+			done
 		else
 			logWarning "Environment variable file not found:  $envFile"
 		fi

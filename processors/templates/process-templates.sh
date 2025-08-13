@@ -254,9 +254,11 @@ fi
 # its escaped version, \&.  Because subsitution occurs in a loop, determination
 # of the extra escape is performed, here.
 _escapeAndpersands=false
-if [[ $BASH_VERSION =~ ^([0-9]+\.[0-9]+).+$ ]]; then
-	bashMajMin=${BASH_REMATCH[1]}
-	if [ 0 -ne $(bc <<< "${bashMajMin} >= 5.0") ]; then
+if [[ $BASH_VERSION =~ ^([0-9]+)\.([0-9]+).+$ ]]; then
+	bashMajor=${BASH_REMATCH[1]}
+	bashMinor=${BASH_REMATCH[2]}
+	# Check if version >= 5.0 using pure Bash arithmetic
+	if (( bashMajor > 5 || (bashMajor == 5 && bashMinor >= 0) )); then
 		# BASH version >= 5.0
 		_escapeAndpersands=true
 		logDebug "BASH version ${BASH_VERSION} detected; escaping & characters in substitution values..."

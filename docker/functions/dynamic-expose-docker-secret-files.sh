@@ -44,15 +44,21 @@ function dynamicExposeDockerSecretFiles {
 
 	# Loop through all of the *.txt files in the specified directory
 	for secretFile in "$searchDir"/*.txt; do
-		# Extract the base name of the file (without the directory path)
-		baseName=$(basename "$secretFile")
+		# Skip when *.txt returns only the glob pattern (no matching files)
+		if [ ! -f "$secretFile" ]; then
+			continue
+		fi
 
-		# Convert the base name to upper case to create the environment variable name
+		# Extract the base name of the file (without the directory path and file
+		# extension).
+		baseName=$(basename "$secretFile" .txt)
+
+		# Convert to upper-case to create the environment variable name
 		envVarName=$(echo "$baseName" | tr '[:lower:]' '[:upper:]')
 
 		# Expose the Docker Secret file as an environment variable
 		export "$envVarName"="$(<"$secretFile")"
-		logInfo "Exposed Docker Secret file:  $secretFile as $envVarName"
+		logInfo "Found and exported $envVarName from:  $secretFile"
 	done
 
 	return 0

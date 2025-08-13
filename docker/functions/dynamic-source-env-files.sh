@@ -90,6 +90,9 @@ function dynamicSourceEnvFiles() {
 				continue
 			fi
 
+			# Log the variable names as a list
+			logLine "Exporting non-empty environment variables from $envFile:  $envVars"
+
 			# Export all variables that were defined in the environment file
 			for envVar in $envVars; do
 				if [[ -n "${!envVar}" ]]; then

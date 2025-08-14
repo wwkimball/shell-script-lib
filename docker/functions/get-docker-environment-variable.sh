@@ -36,7 +36,9 @@ unset setLoggerSource
 # Arguments:
 # @param string $1 Name of the environment variable to resolve; this value is
 #                  case-sensitive.
-# @param string $2 Directory containing Docker Compose YAML and/or .env files.
+# @param string $2 Either a pre-baked Docker Compose YAML configuration file or
+#                  a directory where the Docker Compose YAML and .env files can
+#                  be found.
 # @param string $3 Name of the deployment stage.  Used to disambiguate between
 #                  files like docker-compose.staging.yaml versus
 #                  docker-compose.production.yaml, .env.staging versus
@@ -59,36 +61,61 @@ unset setLoggerSource
 ##
 function getDockerEnvironmentVariable {
 	local varName=${1:?"ERROR:  A Docker environment variable name must be provided as the first positional argument to ${FUNCNAME[0]}"}
-	local dockerDir=${2:?"ERROR:  The Docker files directory must be provided as the second positional argument to ${FUNCNAME[0]}"}
+	local dockerRef=${2:?"ERROR:  Either a pre-baked Docker Compose YAML file or a directory containing Docker Compose confugraiton files must be provided as the second positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${3:?"ERROR:  The deployment stage must be provided as the third positional argument to ${FUNCNAME[0]}"}
-	local tempBakedFile possibleValue returnState=0
+	local dockerDir hasBakedComposeFile tempBakedFile possibleValue returnState=0
 
-	# First, check the shell environment
+	# First, identify the Docker directory based on whether dockerRef is a file
+	# or a directory.  Allow symbolic links.
+	hasBakedComposeFile=false
+	if [ -f "$dockerRef" ]; then
+		dockerDir="$(dirname "$dockerRef")"
+		hasBakedComposeFile=true
+	elif [ -d "$dockerRef" ]; then
+		dockerDir="$dockerRef"
+	elif [ -L "$dockerRef" ]; then
+		dockerDir="$(dirname "$(readlink -f "$dockerRef")")"
+	else
+		logError "Invalid Docker reference:  $dockerRef"
+		return 1
+	fi
+
+	# Then, check the shell environment
 	if [ -n "${!varName}" ]; then
 		echo "${!varName}"
 		return 0
 	}
 
 	# Next, check the Docker Compose YAML file(s)
-	tempBakedFile=$(mktemp -t "docker-compose-XXXXXX.yaml")
-	if dynamicBakeComposeFile "$tempBakedFile" "$deploymentStage" "$dockerDir"
-	then
+	if $hasBakedComposeFile; then
 		# Check for the variable within the baked Docker Compose file
-		possibleValue=$(yaml-get --query="(/services/**/environment/${varName})[0]" "$tempBakedFile" 2>/dev/null)
+		possibleValue=$(yaml-get --query="(/services/**/environment/${varName})[0]" "$dockerRef" 2>/dev/null)
 		if [ 0 -eq $? ] && [ -n "$possibleValue" ]; then
 			echo "$possibleValue"
-			rm -f "$tempBakedFile"
 			return 0
 		fi
 	else
-		returnState=$?
-		if [ "$returnState" -eq 2 ]; then
-			logError "No Docker Compose YAML files found in ${dockerDir}."
+		# Bake and searchthe Docker Compose file(s)
+		tempBakedFile=$(mktemp -t "docker-compose-XXXXXX.yaml")
+		if dynamicBakeComposeFile "$tempBakedFile" "$deploymentStage" "$dockerDir"
+		then
+			# Check for the variable within the baked Docker Compose file
+			possibleValue=$(yaml-get --query="(/services/**/environment/${varName})[0]" "$tempBakedFile" 2>/dev/null)
+			if [ 0 -eq $? ] && [ -n "$possibleValue" ]; then
+				echo "$possibleValue"
+				rm -f "$tempBakedFile"
+				return 0
+			fi
 		else
-			logError "Failed to bake the Docker Compose file:  $tempBakedFile"
+			returnState=$?
+			if [ "$returnState" -eq 2 ]; then
+				logError "No Docker Compose YAML files found in ${dockerDir}."
+			else
+				logError "Failed to bake the Docker Compose file:  $tempBakedFile"
+			fi
+			rm -f "$tempBakedFile"
+			return 2
 		fi
-		rm -f "$tempBakedFile"
-		return 2
 	fi
 
 	# Finally, check for the value in any available .env files

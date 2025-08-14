@@ -1,5 +1,5 @@
 ################################################################################
-# Implement the ensureInternalNetworks function.
+# Implement the ensureDockerInternalNetworks function.
 ################################################################################
 # Libraries must not be directly executed
 if [ -z "${BASH_SOURCE[1]}" ]; then
@@ -39,7 +39,7 @@ unset setLoggerSource
 # STDOUT:  Output from the docker CLI commands
 # STDERR:  Various error messages
 ##
-function ensureInternalNetworks {
+function ensureDockerInternalNetworks {
 	local networkNames=("$@")
 	local returnState=0
 

@@ -138,5 +138,13 @@ EOF
 	fi
 	rm -f "$tempMergeFile"
 
+	# DEBUG
+	if [[ "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
+		logDebug "Merged environment file created successfully with content:"
+		cat "$mergedEnvFile" | while read -r line; do
+			logDebug "  $line"
+		done
+	fi
+
 	return $returnCode
 }

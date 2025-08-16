@@ -91,9 +91,9 @@ function dynamicSourceEnvFiles() {
 			fi
 
 			# Log the variable names as a list
-			logLine "Exporting non-empty environment variables from $envFile:"
+			logDebug "Exporting non-empty environment variables from $envFile:"
 			for envVar in $envVars; do
-				logLine "  - $envVar"
+				logDebug "  - $envVar"
 			done
 
 			# Export all variables that were defined in the environment file

@@ -200,7 +200,7 @@ function errorOut {
 ##
 function logCharLine {
 	local repeatCharacter=${1:0:1}
-	local colorCode=${2:-$COLOR_GREY}
+	local colorCode=${2:-$_colDarkGray}
 	local lineWidth writeLine
 
 	# When no character is provided, use a hyphen
@@ -221,5 +221,5 @@ function logCharLine {
 	writeLine=$(printf "%-${lineWidth}s" "${repeatCharacter}" | tr " " "${repeatCharacter}")
 
 	# Print the line
-	echo -e "${colorCode}${writeLine}${COLOR_RESET}"
+	echo -e "${colorCode}${writeLine}${_colEnd}"
 }

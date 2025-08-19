@@ -109,48 +109,58 @@ function getDockerEnvironmentVariable {
 	else
 		# Bake and search the Docker Compose file(s)
 		tempBakedFile=$(mktemp)
-		if dynamicBakeComposeFile "$tempBakedFile" "$deploymentStage" "$dockerDir"
+		tempLogFile=$(mktemp)
+		if dynamicBakeComposeFile "$tempBakedFile" "$deploymentStage" "$dockerDir" >"$tempLogFile" 2>&1
 		then
 			# Check for the variable within the baked Docker Compose file
 			possibleValue=$(yaml-get --query="(/services/**/environment/${varName})[0]" "$tempBakedFile" 2>/dev/null)
 			if [ 0 -eq $? ] && [ -n "$possibleValue" ]; then
 				echo "$possibleValue"
-				rm -f "$tempBakedFile"
+				rm -f "$tempBakedFile" "$tempLogFile"
 				return 0
 			fi
+			# Clean up temp files when variable not found but no error
+			rm -f "$tempBakedFile" "$tempLogFile"
 		else
 			returnState=$?
+			# Emit the captured log output when there's an error
+			cat "$tempLogFile"
 			if [ "$returnState" -eq 2 ]; then
 				logError "No Docker Compose YAML files found in ${dockerDir}."
 			else
 				logError "Failed to bake the Docker Compose file:  $tempBakedFile"
 			fi
-			rm -f "$tempBakedFile"
+			rm -f "$tempBakedFile" "$tempLogFile"
 			return 2
 		fi
 	fi
 
 	# Finally, check for the value in any available .env files
 	tempBakedFile=$(mktemp)
-	if dynamicMergeEnvFiles "$tempBakedFile" "$dockerDir" "$deploymentStage"
+	tempLogFile2=$(mktemp)
+	if dynamicMergeEnvFiles "$tempBakedFile" "$dockerDir" "$deploymentStage" >"$tempLogFile2" 2>&1
 	then
 		# Check for the variable within the merged .env file
 		possibleValue=$(grep -E "^${varName}=" "$tempBakedFile" | cut -d'=' -f2- | sort -u)
 		if [ -n "$possibleValue" ]; then
 			echo "$possibleValue"
-			rm -f "$tempBakedFile"
+			rm -f "$tempBakedFile" "$tempLogFile2"
 			return 0
 		fi
+		rm -f "$tempLogFile2"
 	else
 		returnState=$?
+		# Emit the captured log output when there's an error
+		cat "$tempLogFile2"
 		if [ "$returnState" -eq 1 ]; then
 			logWarning "No .env files found in ${dockerDir}."
 		else
 			logError "Failed to merge environment files"
 		fi
-		rm -f "$tempBakedFile"
+		rm -f "$tempBakedFile" "$tempLogFile2"
 		return 2
 	fi
 
+	rm -f "$tempBakedFile"
 	return 3
 }

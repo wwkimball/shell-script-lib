@@ -74,6 +74,9 @@ fi
 # Create a global array for tracking executed DDL files
 declare -a _alreadyRunDDLs
 
+# Create a global array for TLS options determined during client detection
+declare -a _tlsOptions
+
 # Allow an environment variable to control whether TLS is enabled
 _disableTLS=false
 if [ -n "$MYSQL_DISABLE_TLS" ]; then
@@ -625,35 +628,20 @@ function executeSQL {
 		errorOut 3 "SQL command detection has failed.  Please set the MYSQL_COMMAND environment variable to the path of the mysql or mariadb command."
 	fi
 
-	# Handle TLS connections, or the lack thereof
-	declare -a tlsOptions
-	if $_disableTLS; then
-		if [[ $_sqlCommand =~ mariadb ]]; then
-			# The mariadb command does not support the --ssl-mode option
-			tlsOptions+=(
-				--skip_ssl
-			)
-		else
-			tlsOptions+=(
-				--ssl-mode=DISABLED
-			)
-		fi
-	fi
-
 	# Transparently pass all arguments through to mysql
 	if $_isDevelopmentStage; then
 		executeComposeCommand "$_sqlCommand" \
-			${tlsOptions[@]} \
+			"${_tlsOptions[@]}" \
 			--user="$_databaseUser" \
 			--password="$_databasePassword" \
 			"$@"
 	else
 		"$_sqlCommand" \
+			"${_tlsOptions[@]}" \
 			--host="$_databaseHost" \
 			--port="$_databasePort" \
 			--user="$_databaseUser" \
 			--password="$_databasePassword" \
-			${tlsOptions[@]} \
 			"$@"
 	fi
 }
@@ -1020,7 +1008,47 @@ function rollbackDDLsOnInterrupt {
 }
 trap rollbackDDLsOnInterrupt SIGINT
 
-# When not provided, derive the correct database client command
+###
+# Detect the correct TLS disable option for the given SQL command.
+#
+# @param <string> $1 The SQL command path to test
+#
+# @return <integer> 0 on success; non-zero on failure
+# @return via STDOUT <string> The TLS disable option that works or an
+#   empty-string when no working option is found
+##
+function detectTLSOption {
+	local sqlCmd=${1:?"ERROR:  SQL command is required as the first positional argument to ${FUNCNAME[0]}."}
+
+	# Test all known possible TLS disable options
+	local testOptions=("--ssl-mode=DISABLED" "--skip_ssl")
+
+	# Request help with each option to detect whether it is allowed
+	for testOption in "${testOptions[@]}"; do
+		if $_isDevelopmentStage; then
+			if executeComposeCommand \
+				"$sqlCmd" \
+				"$testOption" \
+				--help \
+				>/dev/null 2>&1
+			then
+				echo "$testOption"
+				return 0
+			fi
+		else
+			if "$sqlCmd" "$testOption" --help >/dev/null 2>&1; then
+				echo "$testOption"
+				return 0
+			fi
+		fi
+	done
+
+	# If no known option works, return an empty-string
+	echo ""
+	return 1
+}
+
+# When not provided, derive the correct database client command and TLS options
 if [ -z "$_sqlCommand" ]; then
 	if $_isDevelopmentStage; then
 		_sqlCommand=$(executeComposeCommand which mysql 2>/dev/null)
@@ -1051,6 +1079,17 @@ if [ -z "$_sqlCommand" ]; then
 	fi
 
 	logDebug "Detected SQL command: $_sqlCommand"
+fi
+
+# Detect the correct TLS disable option for the SQL client, if TLS is disabled
+if $_disableTLS; then
+	tlsOption=$(detectTLSOption "$_sqlCommand")
+	if [ -n "$tlsOption" ]; then
+		_tlsOptions+=("$tlsOption")
+		logDebug "Detected TLS disable option:  $tlsOption"
+	else
+		logWarning "No TLS disable option found for ${_sqlCommand}; connections may fail if TLS is not configured."
+	fi
 fi
 
 # Get the present schema version

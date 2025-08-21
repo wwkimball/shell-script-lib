@@ -48,7 +48,7 @@
 # Copyright 2025 William W. Kimball, Jr. MBA MSIS
 ################################################################################
 # Constants
-MY_VERSION='2025.05.09-1'
+MY_VERSION='2025.08.21-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
 LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"
@@ -1020,65 +1020,127 @@ trap rollbackDDLsOnInterrupt SIGINT
 function detectTLSOption {
 	local sqlCmd=${1:?"ERROR:  SQL command is required as the first positional argument to ${FUNCNAME[0]}."}
 
-	# Test all known possible TLS disable options
-	local testOptions=("--ssl-mode=DISABLED" "--skip_ssl")
+	# First test if SSL/TLS is already disabled by default (no option needed)
+	local defaultTestResult
+	if $_isDevelopmentStage; then
+		defaultTestResult=$(executeComposeCommand "$sqlCmd" \
+			--user="$_databaseUser" \
+			--password="$_databasePassword" \
+			--execute="SELECT 1" \
+			2>/dev/null || true)
+	else
+		defaultTestResult=$("$sqlCmd" \
+			--host="$_databaseHost" \
+			--port="$_databasePort" \
+			--user="$_databaseUser" \
+			--password="$_databasePassword" \
+			--execute="SELECT 1" \
+			2>/dev/null || true)
+	fi
 
-	# Request help with each option to detect whether it is allowed
+	# If default connection works, SSL is likely disabled by default
+	if [[ "$defaultTestResult" =~ ^1$ ]] || [[ "$defaultTestResult" =~ $'\n'1$ ]]; then
+		echo ""
+		return 0
+	fi
+
+	# SSL might be enabled by default, so test known TLS disable options
+	local testOptions=("--ssl-mode=DISABLED" "--skip-ssl" "--skip_ssl")
+
 	for testOption in "${testOptions[@]}"; do
+		# First check if the option appears in help output
+		local helpOutput
 		if $_isDevelopmentStage; then
-			if executeComposeCommand \
-				"$sqlCmd" \
-				"$testOption" \
-				--help \
-				>/dev/null 2>&1
-			then
-				echo "$testOption"
-				return 0
-			fi
+			helpOutput=$(executeComposeCommand "$sqlCmd" --help 2>/dev/null || true)
 		else
-			if "$sqlCmd" "$testOption" --help >/dev/null 2>&1; then
-				echo "$testOption"
-				return 0
-			fi
+			helpOutput=$("$sqlCmd" --help 2>/dev/null || true)
+		fi
+
+		# Check if the option is mentioned in help (remove leading dashes)
+		local optionName="${testOption#--}"
+		optionName="${optionName%%=*}"  # Remove =VALUE part if present
+		if [[ ! "$helpOutput" =~ $optionName ]]; then
+			continue
+		fi
+
+		# Test the option with a simple SELECT 1 query
+		local testResult
+		if $_isDevelopmentStage; then
+			testResult=$(executeComposeCommand "$sqlCmd" \
+				"$testOption" \
+				--user="$_databaseUser" \
+				--password="$_databasePassword" \
+				--execute="SELECT 1" \
+				2>/dev/null || true)
+		else
+			testResult=$("$sqlCmd" \
+				--host="$_databaseHost" \
+				--port="$_databasePort" \
+				--user="$_databaseUser" \
+				--password="$_databasePassword" \
+				"$testOption" \
+				--execute="SELECT 1" \
+				2>/dev/null || true)
+		fi
+
+		# If we got "1" back, the option works
+		if [[ "$testResult" =~ ^1$ ]] || [[ "$testResult" =~ $'\n'1$ ]]; then
+			echo "$testOption"
+			return 0
 		fi
 	done
 
-	# If no known option works, return an empty-string
+	# If no option works, return empty and indicate failure
 	echo ""
 	return 1
 }
 
-# When not provided, derive the correct database client command and TLS options
+# When not provided, derive the correct database client command to use
 if [ -z "$_sqlCommand" ]; then
+	# Try to find available MySQL/compatible clients
+	declare -a candidateCommands=()
 	if $_isDevelopmentStage; then
-		_sqlCommand=$(executeComposeCommand which mysql 2>/dev/null)
+		candidateCommands+=($(executeComposeCommand which mysql 2>/dev/null || true))
+		candidateCommands+=($(executeComposeCommand which mariadb 2>/dev/null || true))
 	else
-		_sqlCommand=$(which mysql 2>/dev/null)
+		candidateCommands+=($(which mysql 2>/dev/null || true))
+		candidateCommands+=($(which mariadb 2>/dev/null || true))
 	fi
 
-	# Check if mysql command was found and is not deprecated
-	if [ -n "$_sqlCommand" ]; then
-		# Check for a deprecation warning
-		if "$_sqlCommand" --version 2>&1 | grep -q "Deprecated"; then
-			_sqlCommand=''
-		fi
-	fi
+	# Test each candidate to find the best one
+	for candidateCommand in "${candidateCommands[@]}"; do
+		if [ -n "$candidateCommand" ]; then
+			# Get version output to determine actual client type
+			if $_isDevelopmentStage; then
+				versionOutput=$(executeComposeCommand "$candidateCommand" --version 2>/dev/null || true)
+			else
+				versionOutput=$("$candidateCommand" --version 2>/dev/null || true)
+			fi
 
-	# If mysql is not available or deprecated, use mariadb instead
-	if [ -z "$_sqlCommand" ]; then
-		if $_isDevelopmentStage; then
-			_sqlCommand=$(executeComposeCommand which mariadb 2>/dev/null)
-		else
-			_sqlCommand=$(which mariadb 2>/dev/null)
+			# Skip if deprecated
+			if [[ "$versionOutput" =~ Deprecated ]]; then
+				logDebug "Skipping deprecated client: $candidateCommand"
+				continue
+			fi
+
+			# Skip if no version output
+			if [ -z "$versionOutput" ]; then
+				logDebug "Skipping client with no version output: $candidateCommand"
+				continue
+			fi
+
+			# Use the first working client
+			_sqlCommand="$candidateCommand"
+			logDebug "Selected SQL client: $_sqlCommand"
+			logDebug "Client version: $versionOutput"
+			break
 		fi
-	fi
+	done
 
 	# If still empty, exit with error
 	if [ -z "$_sqlCommand" ]; then
-		errorOut 3 "No mysql or mariadb client found!  Please install mysql-client or mariadb (client) to the ${_databaseHost} container."
+		errorOut 3 "No mysql or mariadb client found!  Please install mysql-client or mariadb (client)."
 	fi
-
-	logDebug "Detected SQL command: $_sqlCommand"
 fi
 
 # Detect the correct TLS disable option for the SQL client, if TLS is disabled

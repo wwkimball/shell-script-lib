@@ -60,6 +60,7 @@ DEPLOY_STAGE_QA=qa
 DEPLOY_STAGE_STAGING=staging
 DEPLOY_STAGE_PRODUCTION=production
 VERSION_NUMBER_MAX='99999999-99999999'
+SQL_CLIENT_MISSING_ERROR="SQL client command detection has failed.  Please ensure one is installed or see --help for how to set the command path."
 readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
 	DOCKER_DIRECTORY COMPOSE_BASE_FILE DEPLOY_STAGE_DEVELOPMENT \
 	DEPLOY_STAGE_LAB DEPLOY_STAGE_QA DEPLOY_STAGE_STAGING \
@@ -321,12 +322,24 @@ Schema Description Files:
       resultant schema version will still be written to SETTINGS_TABLE in
       SETTINGS_DB_NAME.
 
+Exit Codes:
+  0: Success
+  1: Bad argument (see output and --help for more information)
+  2: File not found
+  3: Unable to identify the SQL client command
+  4: Error running rollback Schema Description File
+  5: Rollback Schema Description File execution failed
+  6: Forward Schema Description File execution failed
+  7: Unable to get present schema version
+  8: Unable to set target schema version
+
 Disclaimer:
-  This script is destructive and can tear down a production database!  You take
-  on full and personal responsibility for running this script.  The author and
-  maintainer(s) of this script are not responsible for any data loss or
-  corruption that may occur as a result of doing so.  You are strongly advised
-  to create a full backup of the target database(s) before using this!
+  The schema description files provided to this script may be destructive and
+  can tear down a production database!  You take on full and personal
+  responsibility for running this script.  The author and maintainer(s) of this
+  script are not responsible for any data loss or corruption that may occur as a
+  result of doing so.  You are strongly advised to create a full backup of the
+  target database(s) before using this script!
 
 EOHELP
 			exit 0
@@ -625,7 +638,7 @@ function executeComposeCommand {
 function executeSQL {
 	# The SQL command should already be detected and set at script startup
 	if [ -z "$_sqlCommand" ]; then
-		errorOut 3 "SQL command detection has failed.  Please set the MYSQL_COMMAND environment variable to the path of the mysql or mariadb command."
+		errorOut 3 "$SQL_CLIENT_MISSING_ERROR"
 	fi
 
 	# Transparently pass all arguments through to mysql
@@ -1095,53 +1108,29 @@ function detectTLSOption {
 	return 1
 }
 
-# When not provided, derive the correct database client command to use
+# When not provided, derive the correct MySQL/compatible client command to use
 if [ -z "$_sqlCommand" ]; then
-	# Try to find available MySQL/compatible clients
-	declare -a candidateCommands=()
 	if $_isDevelopmentStage; then
-		candidateCommands+=($(executeComposeCommand which mysql 2>/dev/null || true))
-		candidateCommands+=($(executeComposeCommand which mariadb 2>/dev/null || true))
-	else
-		candidateCommands+=($(which mysql 2>/dev/null || true))
-		candidateCommands+=($(which mariadb 2>/dev/null || true))
-	fi
-
-	# Test each candidate to find the best one
-	for candidateCommand in "${candidateCommands[@]}"; do
-		if [ -n "$candidateCommand" ]; then
-			# Get version output to determine actual client type
-			if $_isDevelopmentStage; then
-				versionOutput=$(executeComposeCommand "$candidateCommand" --version 2>/dev/null || true)
-			else
-				versionOutput=$("$candidateCommand" --version 2>/dev/null || true)
+		_sqlCommand=$(executeComposeCommand which mariadb 2>/dev/null)
+		if [ 0 -ne $? ]; then
+			_sqlCommand=$(executeComposeCommand which mysql 2>/dev/null)
+			if [ 0 -ne $? ]; then
+				# Neither mariadb nor mysql found in container
+				errorOut 3 "$SQL_CLIENT_MISSING_ERROR"
 			fi
-
-			# Skip if deprecated
-			if [[ "$versionOutput" =~ Deprecated ]]; then
-				logDebug "Skipping deprecated client: $candidateCommand"
-				continue
-			fi
-
-			# Skip if no version output
-			if [ -z "$versionOutput" ]; then
-				logDebug "Skipping client with no version output: $candidateCommand"
-				continue
-			fi
-
-			# Use the first working client
-			_sqlCommand="$candidateCommand"
-			logDebug "Selected SQL client: $_sqlCommand"
-			logDebug "Client version: $versionOutput"
-			break
 		fi
-	done
-
-	# If still empty, exit with error
-	if [ -z "$_sqlCommand" ]; then
-		errorOut 3 "No mysql or mariadb client found!  Please install mysql-client or mariadb (client)."
+	else
+		_sqlCommand=$(which mariadb 2>/dev/null)
+		if [ 0 -ne $? ]; then
+			_sqlCommand=$(which mysql 2>/dev/null)
+			if [ 0 -ne $? ]; then
+				# Neither mariadb nor mysql found
+				errorOut 3 "$SQL_CLIENT_MISSING_ERROR"
+			fi
+		fi
 	fi
 fi
+logDebug "Using MySQL/compatible SQL client:  $_sqlCommand"
 
 # Detect the correct TLS disable option for the SQL client, if TLS is disabled
 if $_disableTLS; then
@@ -1157,7 +1146,7 @@ fi
 # Get the present schema version
 presentVersion=$(getPresentSchemaVersion)
 if [ $? -ne 0 ]; then
-	exit 2
+	exit 7
 fi
 
 # For version number comparisons, the dash in the schema version is changed to

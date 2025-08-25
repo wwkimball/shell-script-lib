@@ -48,7 +48,7 @@
 # Copyright 2025 William W. Kimball, Jr. MBA MSIS
 ################################################################################
 # Constants
-MY_VERSION='2025.08.21-1'
+MY_VERSION='2025.08.25-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
 LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"

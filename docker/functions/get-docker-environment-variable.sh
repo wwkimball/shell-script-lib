@@ -63,6 +63,7 @@ function getDockerEnvironmentVariable {
 	local dockerRef=${2:?"ERROR:  Either a pre-baked Docker Compose YAML file or a directory containing Docker Compose confugraiton files must be provided as the second positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${3:?"ERROR:  The deployment stage must be provided as the third positional argument to ${FUNCNAME[0]}"}
 	local dockerDir hasBakedComposeFile tempBakedFile possibleValue returnState=0
+	local disambiguatedVarName="${varName}_${deploymentStage}"
 
     # Validate varName is a valid shell environment variable identifier
 	if ! [[ "$varName" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
@@ -95,6 +96,12 @@ function getDockerEnvironmentVariable {
 	# Then, check the shell environment
 	if [ -n "${!varName}" ]; then
 		echo "${!varName}"
+		return 0
+	fi
+
+	# Also check whether there is a disambiguated shell environment variable
+	if [ -n "${!disambiguatedVarName}" ]; then
+		echo "${!disambiguatedVarName}"
 		return 0
 	fi
 

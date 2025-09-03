@@ -27,10 +27,20 @@ unset setLoggerSource
 #
 # This function searches for the specified environment variable in the following
 # locations, in preferred order:
-# 1. Environment variables of the current shell
+# 1. Environment variables of the current shell; two are checked:
+#    - The given (deployment stage ambiguous) variable name
+#    - The disambiguated variable name (varName_deploymentStage)
 # 2. Any available Docker Compose YAML files in the specified directory,
 #    filtered by the deployment stage
 # 3. .env* files in the specified directory, filtered by the deployment stage
+#
+# MAINTENANCE NOTE:
+# This function is deeply embedded in various scripts and other functions.  Its
+# output controls key behaviors of Docker Compose and related tooling.  Any
+# spurious content sent to STDOUT by this function can cause issues that are
+# extremely difficult to diagnose.  As such, all non-value output MUST be sent
+# to STDERR.  Only empty strings (nothing found) or actual discovered values
+# should be sent to STDOUT.
 #
 # Arguments:
 # @param string $1 Name of the environment variable to resolve; this value is
@@ -160,7 +170,7 @@ function getDockerEnvironmentVariable {
 		# Emit the captured log output when there's an error
 		cat "$tempLogFile2"
 		if [ "$returnState" -eq 1 ]; then
-			logWarning "No .env files found in ${dockerDir}."
+			logWarningToError "No .env files found in ${dockerDir}."
 		else
 			logError "Failed to merge environment files"
 		fi

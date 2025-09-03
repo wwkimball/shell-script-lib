@@ -31,6 +31,14 @@ unset setLoggerSource
 # the selection of environment files.  The merged content is written to the
 # specified temporary file.
 #
+# MAINTENANCE NOTE:
+# This function is deeply embedded in various scripts and other functions.  Its
+# output controls key behaviors of Docker Compose and related tooling.  Any
+# spurious content sent to STDOUT by this function can cause issues that are
+# extremely difficult to diagnose.  As such, all non-value output MUST be sent
+# to STDERR.  Only empty strings (nothing found) or actual discovered values
+# should be sent to STDOUT.
+#
 # @param string $1 The temporary file path to write the merged environment
 #                  variables to.  The caller is responsible for creating and
 #                  later destroying this file.
@@ -58,7 +66,7 @@ function dynamicMergeEnvFiles() {
 	local mergedEnvFile=${1:?"ERROR:  The merged environment file path must be provided as the first positional argument to ${FUNCNAME[0]}"}
 	local dockerDir=${2:?"ERROR:  The Docker files directory must be provided as the second positional argument to ${FUNCNAME[0]}"}
 	local deploymentStage=${3:?"ERROR:  The deployment stage must be provided as the third positional argument to ${FUNCNAME[0]}"}
-	local envFile returnCode
+	local envFile returnCode tempMergeFile varName tempFile2
 	declare -a envFiles
 	shift 3
 
@@ -66,7 +74,7 @@ function dynamicMergeEnvFiles() {
 	if ! discoverEnvFiles envFiles "$dockerDir" "$deploymentStage" "$@"; then
 		returnCode=$?
 		if [ "$returnCode" -eq 1 ]; then
-			logWarning "No environment files found to merge."
+			logWarningToError "No environment files found to merge."
 		fi
 		return $returnCode
 	fi
@@ -79,7 +87,6 @@ function dynamicMergeEnvFiles() {
 
 	# Merge all discovered environment variable files
 	returnCode=1
-	local tempMergeFile
 	tempMergeFile=$(mktemp)
 
 	for envFile in "${envFiles[@]}"; do
@@ -90,7 +97,7 @@ function dynamicMergeEnvFiles() {
 				returnCode=0
 			fi
 
-			logInfo "Merging environment variables from:  $envFile"
+			logDebugToError "Merging environment variables from:  $envFile"
 
 			# DEBUG:  Add a header comment to identify the source file
 			cat >>"$tempMergeFile" <<EOF
@@ -107,12 +114,11 @@ EOF
 
 				# Extract variable name from assignments
 				if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)= ]]; then
-					local varName="${BASH_REMATCH[1]}"
+					varName="${BASH_REMATCH[1]}"
 
 					# Remove any previous occurrences of this variable from the
 					# temp file.
 					if [ -s "$tempMergeFile" ]; then
-						local tempFile2
 						tempFile2=$(mktemp)
 
 						# Use grep to exclude lines that set this variable
@@ -125,7 +131,7 @@ EOF
 				echo "$line" >>"$tempMergeFile"
 			done <"$envFile"
 		else
-			logWarning "Environment variable file not found:  $envFile"
+			logWarningToError "Environment variable file not found:  $envFile"
 		fi
 	done
 
@@ -140,9 +146,9 @@ EOF
 
 	# DEBUG
 	if [[ "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
-		logDebug "Merged environment file created successfully with content:"
+		logDebugToError "Merged environment file created successfully with content:"
 		cat "$mergedEnvFile" | while read -r line; do
-			logDebug "  $line"
+			logDebugToError "  $line"
 		done
 	fi
 

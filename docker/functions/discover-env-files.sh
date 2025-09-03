@@ -30,6 +30,14 @@ unset setLoggerSource
 # files will be evaluated to find all relevant service names to further inform
 # the selection of environment files.
 #
+# MAINTENANCE NOTE:
+# This function is deeply embedded in various scripts and other functions.  Its
+# output controls key behaviors of Docker Compose and related tooling.  Any
+# spurious content sent to STDOUT by this function can cause issues that are
+# extremely difficult to diagnose.  As such, all non-value output MUST be sent
+# to STDERR.  Only empty strings (nothing found) or actual discovered values
+# should be sent to STDOUT.
+#
 # @param string $1 The Docker directory to inspect for environment variable
 #                  files
 # @param string $2 The deployment stage name, i.e.:  development, lab, qa,
@@ -103,7 +111,7 @@ function discoverEnvFiles() {
 	# Merge only when there is more than one compose file
 	local hasComposeFiles=false
 	case "$composeFileTally" in
-		0)	logWarning "No Docker Compose files found." ;;
+		0)	logWarningToError "No Docker Compose files found." ;;
 
 		1)	hasComposeFiles=true
 			if ! cp "$evalFile" "$mergedComposeFile"; then
@@ -113,7 +121,10 @@ function discoverEnvFiles() {
 		;;
 
 		2)	hasComposeFiles=true
-			yaml-merge "${mergeArgs[@]}"
+			if ! yaml-merge "${mergeArgs[@]}" &>/dev/null; then
+				logError "Failed to merge Docker Compose files"
+				return 3
+			fi
 		;;
 	esac
 
@@ -144,7 +155,7 @@ function discoverEnvFiles() {
 		if [ -f "$envFile" ]; then
 			envFilesRef+=("$envFile")
 		else
-			logWarning "Environment variable file not found:  $envFile"
+			logWarningToError "Environment variable file not found:  $envFile"
 		fi
 	done
 

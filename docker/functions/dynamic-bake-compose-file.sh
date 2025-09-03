@@ -3,9 +3,24 @@
 ################################################################################
 # Libraries must not be directly executed
 if [ -z "${BASH_SOURCE[1]}" ]; then
-	echo "ERROR:  Attempt to directly execute $0." >&2
+	logError "Attempt to directly execute $0." >&2
 	exit 1
 fi
+
+# Dynamically load the common logging functions
+if [ -z "$LIB_DIRECTORY" ]; then
+	# The common library directory is not set, so set it to the default value
+	MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
+	LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"
+	readonly MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY
+fi
+setLoggerSource="${LIB_DIRECTORY}/logging/set-logger.sh"
+if ! source "$setLoggerSource"; then
+	logError "Unable to source ${setLoggerSource}!" >&2
+	exit 2
+fi
+unset setLoggerSource
 
 ###
 # Bake Docker Compose configuration files for a named profile, dynamically.
@@ -23,6 +38,14 @@ fi
 # always ".env".  So, when the identifier is "development", the override
 # compose file would be "docker-compose.development.yaml" and the override
 # environment file would be ".env.development".
+#
+# MAINTENANCE NOTE:
+# This function is deeply embedded in various scripts and other functions.  Its
+# output controls key behaviors of Docker Compose and related tooling.  Any
+# spurious content sent to STDOUT by this function can cause issues that are
+# extremely difficult to diagnose.  As such, all non-value output MUST be sent
+# to STDERR.  Only empty strings (nothing found) or actual discovered values
+# should be sent to STDOUT.
 #
 # @param string $1 The output file to create with the baked configuration.
 # @param string $2 The profile name; one of development, lab, qa, staging,
@@ -42,7 +65,7 @@ function dynamicBakeComposeFile() {
 	local outputFile profileName sourceDirectory mainComposeFile \
 		overrideComposeFile tempEnvFile altMainComposeFile \
 		altOverrideComposeFile returnState
-	outputFile=${1:?"ERROR:  ${FUNCNAME[0]}:  Missing output file name."}
+	outputFile=${1:?"ERROR:  Missing output file name."}
 	profileName=${2:-"development"}
 	sourceDirectory=${3:-"docker"}
 	mainComposeFile="${sourceDirectory}/docker-compose.yaml"
@@ -55,7 +78,7 @@ function dynamicBakeComposeFile() {
 		if [ -f "$altMainComposeFile" ]; then
 			mainComposeFile="$altMainComposeFile"
 		else
-			echo "ERROR:  ${FUNCNAME[0]}:  Missing base Docker Compose file:  ${mainComposeFile}" >&2
+			logError "Missing base Docker Compose file:  ${mainComposeFile}"
 			return 2
 		fi
 	fi

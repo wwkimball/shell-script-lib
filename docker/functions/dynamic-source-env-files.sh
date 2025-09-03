@@ -73,7 +73,7 @@ function dynamicSourceEnvFiles() {
 				returnCode=0
 			fi
 
-			logInfo "Sourcing environment variables from:  $envFile"
+			logLine "Sourcing environment variables from:  $envFile"
 
 			# Get the list of (valid) environment variables defined in this file
 			envVars=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$envFile" | cut -d'=' -f1 | sort -u)

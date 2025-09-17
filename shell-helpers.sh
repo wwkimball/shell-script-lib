@@ -8,42 +8,48 @@ if [ -z "${BASH_SOURCE[1]}" ]; then
 fi
 
 # Constants
-_myDir="${BASH_SOURCE[0]%/*}"
-_myVersion="2025.09.03-1"
-readonly _myDir _myVersion
+MY_VERSION="2025.09.17-1"
+readonly MY_VERSION
+
+# Reduce directory resolution overhead for all further library calls by caching
+# the base directory of the library as STD_SHELL_LIB, when it isn't already set.
+if [ -z "$STD_SHELL_LIB" ]; then
+	STD_SHELL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+export STD_SHELL_LIB
 
 # Logging facility
-if ! source "${_myDir}/logging/set-logger.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/logging/set-logger.sh" >&2
+if ! source "${STD_SHELL_LIB}/logging/set-logger.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/logging/set-logger.sh" >&2
 	exit 2
 fi
 
 # General Docker helpers
-if ! source "${_myDir}/docker/source-functions.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/docker/source-functions.sh" >&2
+if ! source "${STD_SHELL_LIB}/docker/source-functions.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/docker/source-functions.sh" >&2
 	exit 2
 fi
 
 # Math helpers
-if ! source "${_myDir}/math/math-helpers.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/math/math-helpers.sh" >&2
+if ! source "${STD_SHELL_LIB}/math/math-helpers.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/math/math-helpers.sh" >&2
 	exit 2
 fi
 
 # SSH helpers
-if ! source "${_myDir}/ssh/ssh-helpers.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/ssh/ssh-helpers.sh" >&2
+if ! source "${STD_SHELL_LIB}/ssh/ssh-helpers.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/ssh/ssh-helpers.sh" >&2
 	exit 2
 fi
 
 # Versioning helpers
-if ! source "${_myDir}/versioning/release-helpers.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/versioning/release-helpers.sh" >&2
+if ! source "${STD_SHELL_LIB}/versioning/release-helpers.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/versioning/release-helpers.sh" >&2
 	exit 2
 fi
 
 # SCM helpers
-if ! source "${_myDir}/scm/scm-helpers.sh"; then
-	echo "ERROR:  Unable to source ${_myDir}/scm/scm-helpers.sh" >&2
+if ! source "${STD_SHELL_LIB}/scm/scm-helpers.sh"; then
+	echo "ERROR:  Unable to source ${STD_SHELL_LIB}/scm/scm-helpers.sh" >&2
 	exit 2
 fi

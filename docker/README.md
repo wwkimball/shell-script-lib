@@ -281,7 +281,7 @@ Example `build.sh`:
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 DOCKER_HELPER_DIRECTORY="${LIB_DIRECTORY}/docker"
 readonly MY_DIRECTORY LIB_DIRECTORY DOCKER_HELPER_DIRECTORY
 
@@ -307,7 +307,7 @@ Example `compose.sh`:
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 DOCKER_HELPER_DIRECTORY="${LIB_DIRECTORY}/docker"
 readonly MY_DIRECTORY LIB_DIRECTORY DOCKER_HELPER_DIRECTORY
 
@@ -333,7 +333,7 @@ Example `deploy.sh`:
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 DOCKER_HELPER_DIRECTORY="${LIB_DIRECTORY}/docker"
 readonly MY_DIRECTORY LIB_DIRECTORY DOCKER_HELPER_DIRECTORY
 
@@ -358,7 +358,7 @@ Example `start.sh`:
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 DOCKER_HELPER_DIRECTORY="${LIB_DIRECTORY}/docker"
 readonly MY_DIRECTORY LIB_DIRECTORY DOCKER_HELPER_DIRECTORY
 
@@ -383,7 +383,7 @@ Example `stop.sh`:
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 DOCKER_HELPER_DIRECTORY="${LIB_DIRECTORY}/docker"
 readonly MY_DIRECTORY LIB_DIRECTORY DOCKER_HELPER_DIRECTORY
 
@@ -428,7 +428,7 @@ documentation, enabling more advanced use-cases.
 ################################################################################
 # Constants
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIRECTORY="${MY_DIRECTORY}/lib"
+LIB_DIRECTORY="${STD_SHELL_LIB:-"${MY_DIRECTORY}/lib"}"
 readonly MY_DIRECTORY LIB_DIRECTORY
 
 # Import the shell helpers

@@ -14,7 +14,7 @@ if [ -z "$LIB_DIRECTORY" ]; then
 	# The common library directory is not set, so set it to the default value
 	MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
-	LIB_DIRECTORY="${PROJECT_DIRECTORY}/lib"
+	LIB_DIRECTORY="${STD_SHELL_LIB:-"${PROJECT_DIRECTORY}/lib"}"
 	readonly MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY
 fi
 setLoggerSource="${LIB_DIRECTORY}/logging/set-logger.sh"

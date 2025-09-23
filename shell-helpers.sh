@@ -8,8 +8,8 @@ if [ -z "${BASH_SOURCE[1]}" ]; then
 fi
 
 # Constants
-MY_VERSION="2025.09.17-1"
-readonly MY_VERSION
+STD_SHELL_LIB_VERSION="2025.09.17-1"
+readonly STD_SHELL_LIB_VERSION
 
 # Reduce directory resolution overhead for all further library calls by caching
 # the base directory of the library as STD_SHELL_LIB, when it isn't already set.

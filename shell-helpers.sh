@@ -25,7 +25,7 @@ if [ -z "${BASH_SOURCE[1]}" ]; then
 fi
 
 # Constants
-STD_SHELL_LIB_VERSION="2025.09.17-1"
+STD_SHELL_LIB_VERSION="2025.09.25-1"
 readonly STD_SHELL_LIB_VERSION
 
 # Reduce directory resolution overhead for all further library calls by caching

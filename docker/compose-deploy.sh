@@ -249,17 +249,6 @@ cp "${PROJECT_DIRECTORY}"/{start,start-*}.sh "${virtualRootDir}/" 2>/dev/null
 cp "${PROJECT_DIRECTORY}"/{stop,stop-*}.sh "${virtualRootDir}/" 2>/dev/null
 cp -r "${PROJECT_DIRECTORY}"/lib "${virtualLibDir}/"
 
-# Allow the user to copy an entire directory en-masse to the remote host; this
-# is treated as an overlay to the virtual filesystem.
-deployOverlayDir="${PROJECT_DIRECTORY}/deploy.d"
-if [ -d "${deployOverlayDir}" ]; then
-	logInfo "Copying overlay files from ${deployOverlayDir} to ${virtualRootDir}..."
-	cp -r "${deployOverlayDir}"/* "${virtualRootDir}/"
-fi
-
-# Remove all Git tracking files from the virtual filesystem
-find "${virtualRootDir}" -name '.git*' -exec rm -rf {} \;
-
 # Identify the Docker Compose override files to use
 overrideComposeFile="${DOCKER_DIRECTORY}/docker-compose.${_deployStage}.yaml"
 if [ ! -f "$overrideComposeFile" ]; then
@@ -295,6 +284,17 @@ fi
 logLine "Removing build contexts and service profiles from the baked Docker Compose configuration file..."
 yaml-set --nostdin --delete --change='services.*.build' "$bakedComposeFile" 2>/dev/null
 yaml-set --nostdin --delete --change='services.*.profiles' "$bakedComposeFile" 2>/dev/null
+
+# Allow the user to copy an entire directory en-masse to the remote host; this
+# is treated as an overlay to the virtual filesystem.
+deployOverlayDir="${PROJECT_DIRECTORY}/deploy.d"
+if [ -d "${deployOverlayDir}" ]; then
+	logInfo "Copying overlay files from ${deployOverlayDir} to ${virtualRootDir}..."
+	cp -r "${deployOverlayDir}"/* "${virtualRootDir}/"
+fi
+
+# Remove all Git tracking files from the virtual filesystem
+find "${virtualRootDir}" -name '.git*' -exec rm -rf {} \;
 
 # Deploy to each host
 for deployToHost in "${_deployToHosts[@]}"; do

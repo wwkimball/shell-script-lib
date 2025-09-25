@@ -96,12 +96,19 @@ other secrets like TLS certificates, thumbnail files, and so on.
 ## Adding the Standard Shell Script submodule
 
 Add the shared shell helper library as a submodule (example) at the top-level
-directory of your project.  These commands should be used:
+directory of your project, usually in the `./lib/` directory.  These commands
+should be used:
 
 ```bash
-git submodule add -b master git@bitbucket.org:kimballstuff/shell-script-lib.git lib
+git submodule add -b master git@github.com:wwkimball/shell-script-lib.git lib
 git submodule update --init --recursive
 ```
+
+**IMPORTANT**:  If you clone this project anywhere other than to `./lib/`, be
+sure to set the `STD_SHELL_LIB` environment variable of your shell to the fully-
+qualified path to wherever you actually cloned it to!  Failing this may cause
+components of the library -- and the recommended sample scripts below -- to
+fail as they try to import each other.
 
 You should then immediately commit and push your repository because adding any
 submodule makes a change to the `.gitmodules` file (and adds the commit hash a

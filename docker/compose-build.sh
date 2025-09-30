@@ -556,6 +556,55 @@ for buildService in "${buildServices[@]}"; do
 			done < <(yaml-get --nostdin --query="$secretsPath.*" "$bakedComposeFile" 2>/dev/null)
 		fi
 
+		# Extract and mount volumes
+		volumesPath="services.${buildService}.volumes"
+		if yaml-get --nostdin --query="$volumesPath" "$bakedComposeFile" >/dev/null 2>&1; then
+			while IFS= read -r volumeDef; do
+				logInfo "Processing volume definition:  ${volumeDef}"
+				if [ -n "$volumeDef" ]; then
+					# The result will be in single-line JSON form, similar to:
+					# {"type": "bind", "source": "/Users/username/path", "target": "/target/path", "bind": {"create_host_path": true}}
+					#
+					# Only bind mounts are supported here
+					volumeType=$(echo "$volumeDef" | yaml-get --query='type' 2>/dev/null)
+					if [ "$volumeType" != "bind" ]; then
+						logInfo "Skipping non-bind volume type, ${volumeType}."
+						continue
+					fi
+
+					volumeSource=$(echo "$volumeDef" | yaml-get --query='source' 2>/dev/null)
+					if [ -z "$volumeSource" ]; then
+						logInfo "Skipping volume with no source."
+						continue
+					fi
+
+					volumeTarget=$(echo "$volumeDef" | yaml-get --query='target' 2>/dev/null)
+					if [ -z "$volumeTarget" ]; then
+						logInfo "Skipping volume with no target."
+						continue
+					fi
+
+					# Create the source path if it does not exist and create_host_path is true
+					createHostPath=$(echo "$volumeDef" | yaml-get --query='bind.create_host_path' 2>/dev/null)
+					if [ "$createHostPath" == "true" ] && [ ! -e "$volumeSource" ]; then
+						mkdir -p "$volumeSource"
+						if [ 0 -ne $? ]; then
+							errorOut 20 "Could not create host path, ${volumeSource}, for volume mount!"
+						fi
+					fi
+
+					if [ ! -e "$volumeSource" ]; then
+						logInfo "Skipping volume with non-existent source, ${volumeSource}."
+						continue
+					fi
+
+					dockerRunArgs+=(--mount "type=bind,source=${volumeSource},target=${volumeTarget}")
+				else
+					logInfo "Skipping empty volume definition."
+				fi
+			done < <(yaml-get --nostdin --query="$volumesPath.*" "$bakedComposeFile" 2>/dev/null)
+		fi
+
 		# Run the test script in a disposable container
 		if cat "$buildPostServiceScript" | docker run "${dockerRunArgs[@]}" "$serviceImage" /bin/sh -s; then
 			logInfo "Post-build script completed successfully."

@@ -186,6 +186,6 @@ exec ...
 Note that this command is more verbose than the development version.  It needs
 to specify the remote database connection settings and where -- within the
 container -- the database schema files reside.  The suggested database user,
-`postgres` can be any other username or role your application is allowed to use
+`postgres`, can be any other username or role your application is allowed to use
 with sufficient permissions to create and otherwise manage schema and related
 assets.

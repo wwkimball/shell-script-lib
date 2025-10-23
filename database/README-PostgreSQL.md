@@ -98,7 +98,7 @@ Example directory layout:
 ```
 
 Create the base schema and application admin user as
-`/ddl/mysql/2025/05/20250518-1.ddl`:
+`/ddl/postgresql/2025/05/20250518-1.ddl`:
 
 ```sql
 -- database: myapp
@@ -111,7 +111,7 @@ CREATE DATABASE myapp OWNER myapp_admin;
 ```
 
 Rollback base schema creation and application admin user as
-`/ddl/mysql/2025/05/20250518-1.rollback.ddl`:
+`/ddl/postgresql/2025/05/20250518-1.rollback.ddl`:
 
 ```sql
 -- database: myapp
@@ -126,7 +126,7 @@ DROP ROLE IF EXISTS myapp_admin;
 
 Create the settings table (used for schema versioning and can also be used by
 your application for any other persistent settings) as
-`/ddl/mysql/2025/05/20250518-2.ddl`:
+`/ddl/postgresql/2025/05/20250518-2.ddl`:
 
 ```sql
 -- database: myapp
@@ -142,7 +142,7 @@ INSERT INTO settings (name, value) VALUES ('schema_version','20250518-1')
 ```
 
 Rollback the settings table creation as
-`/ddl/mysql/2025/05/20250518-2.rollback.ddl`:
+`/ddl/postgresql/2025/05/20250518-2.rollback.ddl`:
 
 ```sql
 -- database: myapp

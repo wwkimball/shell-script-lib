@@ -61,19 +61,25 @@ requirement.
 
 Single platform (only one database type required):
 
-> /ddl
+```text
+/ddl
+```
 
 Multiple platforms (projects supporting both MySQL and PostgreSQL):
 
-> /ddl/mysql
-> /ddl/postgresql
+```text
+/ddl/mysql
+/ddl/postgresql
+```
 
 Under each platform directory, organize files by year and month to avoid very
 large directories (which may cause operating system limitation issues) and to
 keep file ordering numeric and predictable.  For example:
 
-> /ddl/mysql/2025/05/20250518-1.ddl
-> /ddl/mysql/2025/05/20250518-1.rollback.ddl
+```text
+/ddl/mysql/2025/05/20250518-1.ddl
+/ddl/mysql/2025/05/20250518-1.rollback.ddl
+```
 
 This structure ensures the directory sizes remain manageable and that the files
 sort in numerical/chronological order automatically.

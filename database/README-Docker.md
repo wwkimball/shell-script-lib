@@ -155,6 +155,7 @@ or after the schema update as needed, but keep the schema update call intact.
 ```bash
 # Constants
 LIB_DIRECTORY="${INSTALL_DIRECTORY}/lib"
+DDL_DIRECTORY="${INSTALL_DIRECTORY}/ddl/postgresql"
 readonly LIB_DIRECTORY
 
 # Import the shell helpers (provides errorOut, logInfo, and more)
@@ -167,14 +168,19 @@ fi
 # - The deployment stage must be any supported value other than "development".
 #   Otherwise, the script will incorrectly assume that it is running on the bare
 #   developer's workstation rather than from within a Docker container.
+# - This example uses the postgres user.  You can change it to any user which
+#   has sufficient permissions to create all assets your application needs as
+#   long as that user exists **before** your DDL runs.  You *should* externalize
+#   this value by creating an appropriately-named Docker Secret and loading its
+#   value using the exposeDockerSecretFile function from shell-helpers.
 "${LIB_DIRECTORY}"/database/schema/postgresql.sh \
     --stage production \
-    --db-host "${DB_HOST}" \
-    --db-port "${DB_PORT}" \
+    --db-host "$DB_HOST" \
+    --db-port "$DB_PORT" \
     --db-user postgres \
     --password-file /run/secrets/postgresql_root_password \
-    --default-db-name "${DB_NAME}" \
-    --ddl-directory /opt/your-app/ddl/postgresql
+    --default-db-name "$DB_NAME" \
+    --ddl-directory "$DDL_DIRECTORY"
 if [ 0 -ne $? ]; then
     errorOut 1 "Database schema update failed; aborting bootstrap."
 fi
@@ -185,9 +191,9 @@ logInfo "Database schema update completed successfully."
 exec ...
 ```
 
-Note that this command is more verbose than the development version.  It needs
-to specify the remote database connection settings and where -- within the
-container -- the database schema files reside.  The suggested database user,
-`postgres`, can be any other username or role your application is allowed to use
-with sufficient permissions to create and otherwise manage schema and related
-assets.
+Note that this call to the database schema automation helper is more verbose
+than the development version.  It needs to specify the remote database
+connection details and where -- within the container -- the database schema
+files reside.  The suggested database user, `postgres`, can be any other
+username or role your application is allowed to use with sufficient permissions
+to create and otherwise manage your application's schema and related assets.

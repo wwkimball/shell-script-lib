@@ -134,10 +134,12 @@ match):
 * Environment variables (or secrets/files) similar to the following:
 
 ```bash
-# Example ENVs expected by the bootstrap snippet
-POSTFIXADMIN_DB_HOST=your.database.host
-POSTFIXADMIN_DB_PORT=5432
-POSTFIXADMIN_DB_NAME=postfixadmin
+# Example ENVs expected by the bootstrap snippet; you can use any variable names
+# which suit your needs as long as the same variable names are used in the
+# ENTRYPOINT script.
+DB_HOST=your.database.host
+DB_PORT=5432
+DB_NAME=your-schema-name
 INSTALL_DIRECTORY=/opt/your-app
 ```
 
@@ -155,7 +157,7 @@ or after the schema update as needed, but keep the schema update call intact.
 LIB_DIRECTORY="${INSTALL_DIRECTORY}/lib"
 readonly LIB_DIRECTORY
 
-# Import the shell helpers
+# Import the shell helpers (provides errorOut, logInfo, and more)
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
     echo "ERROR:  Failed to import shell helpers!" >&2
     exit 2
@@ -167,11 +169,11 @@ fi
 #   developer's workstation rather than from within a Docker container.
 "${LIB_DIRECTORY}"/database/schema/postgresql.sh \
     --stage production \
-    --db-host "${POSTFIXADMIN_DB_HOST}" \
-    --db-port "${POSTFIXADMIN_DB_PORT}" \
+    --db-host "${DB_HOST}" \
+    --db-port "${DB_PORT}" \
     --db-user postgres \
     --password-file /run/secrets/postgresql_root_password \
-    --default-db-name "${POSTFIXADMIN_DB_NAME}" \
+    --default-db-name "${DB_NAME}" \
     --ddl-directory /opt/your-app/ddl/postgresql
 if [ 0 -ne $? ]; then
     errorOut 1 "Database schema update failed; aborting bootstrap."

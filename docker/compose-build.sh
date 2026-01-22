@@ -187,8 +187,11 @@ Builds the Docker image(s) for this project.  OPTIONS include:
        ${DEPLOY_STAGE_DEVELOPMENT}.
   -p PROGRESS_MODE, --progress PROGRESS_MODE
        The Docker Compose progress mode to use while building the docker
-       image(s).  The default is ${_progressMode}.  Refer to the Docker Compose
-       documentation for the available options.
+	  image(s).  The default is ${_progressMode}.  Refer to the Docker Compose
+	  documentation for the available options.  For continuity, when set to
+	  'plain', the push step will also disable ANSI TTY formatting
+	  (equivalent to passing '--ansi never' to 'docker compose push') to
+	  reduce the chance of display-related errors on some terminals.
   -r VERSION_FILE, --version-file VERSION_FILE
        The file containing the base version number.  A version file is required
        in order to properly version and build-tag Docker images via this script.
@@ -653,8 +656,18 @@ for buildService in "${buildServices[@]}"; do
 		# push the tag that is present in the Compose file, which is the
 		# versioned tag.  We want to push both the versioned and latest tags.
 		logInfo "Pushing the new versioned image to the registry..."
+
+		# Map '--progress plain' to '--ansi never' for the push step to mitigate
+		# "index out of range" errors for some Docker Registry, Image Name, and
+		# TTY combinations.
+		declare -a _extraPushArgs=()
+		if [ "$_progressMode" = "plain" ]; then
+			_extraPushArgs+=(--ansi never)
+		fi
+
 		dockerCompose "$bakedComposeFile" "" \
 			--profile "$_deployStage" \
+			"${_extraPushArgs[@]}" \
 			push ${buildService}
 		if [ 0 -ne $? ]; then
 			errorOut 15 "Could not push the new versioned image to the registry!"

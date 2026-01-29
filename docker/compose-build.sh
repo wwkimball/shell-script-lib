@@ -496,10 +496,18 @@ for buildService in "${buildServices[@]}"; do
 	# Perform the actual build
 	logCharLine "-"
 	logInfo "Building version ${dockerImageVersion} of ${dockerImageBaseName} for ${buildService}..."
+
+	# Build options
+	buildOptions="--pull"
+	# Force no-cache in development to ensure template-generated files are always included
+	if [ "$_deployStage" == "$DEPLOY_STAGE_DEVELOPMENT" ]; then
+		buildOptions+=" --no-cache"
+	fi
+
 	if ! dockerCompose "$bakedComposeFile" "" \
 		--profile "$_deployStage" \
 		--progress "$_progressMode" \
-		build --pull ${buildService}
+		build $buildOptions ${buildService}
 	then
 		errorOut 11 "Docker build failed!"
 	fi

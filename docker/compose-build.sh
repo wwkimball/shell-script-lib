@@ -94,6 +94,7 @@ fi
 
 # Process command-line arguments, if there are any
 _bakedDir="${TMPDIR:-$(dirname $(mktemp -u))}"
+_buildWithCache=true
 _cleanResources=false
 _deployStage=$DEPLOY_STAGE_DEVELOPMENT
 _hasErrors=false
@@ -107,6 +108,10 @@ _servicesRunning=false
 _startEnvironment=false
 while [ $# -gt 0 ]; do
 	case $1 in
+		-B|--no-build-cache)
+			_buildWithCache=false
+			;;
+
 		-b|--baked)
 			if [ -z "$2" ]; then
 				logError "Missing value for $1 option!"
@@ -151,6 +156,8 @@ while [ $# -gt 0 ]; do
 $0 [OPTIONS] [--] [BUILD_SERVICE...]
 
 Builds the Docker image(s) for this project.  OPTIONS include:
+  -B, --no-build-cache
+	   Do not use the Docker build cache when building the image(s).
   -b BAKED_DIR, --baked BAKED_DIR
        The directory in which to permanently save the baked Docker Compose file,
        taking the name of any selected override file.  Left unset, the system
@@ -497,10 +504,10 @@ for buildService in "${buildServices[@]}"; do
 	logCharLine "-"
 	logInfo "Building version ${dockerImageVersion} of ${dockerImageBaseName} for ${buildService}..."
 
-	# Build options
+	# Build options; some are mandatory, some optional
 	buildOptions="--pull"
-	# Force no-cache in development to ensure template-generated files are always included
-	if [ "$_deployStage" == "$DEPLOY_STAGE_DEVELOPMENT" ]; then
+	# Let the user choose whether to use the Docker build cache
+	if ! $_buildWithCache; then
 		buildOptions+=" --no-cache"
 	fi
 

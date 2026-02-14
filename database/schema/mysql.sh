@@ -60,7 +60,7 @@
 # limitations under the License.
 ################################################################################
 # Constants
-MY_VERSION='2025.08.25-1'
+MY_VERSION='2026.02.13-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
 LIB_DIRECTORY="${STD_SHELL_LIB:-"${PROJECT_DIRECTORY}/lib"}"
@@ -76,7 +76,7 @@ SQL_CLIENT_MISSING_ERROR="SQL client command detection has failed.  Please ensur
 readonly MY_VERSION MY_DIRECTORY PROJECT_DIRECTORY LIB_DIRECTORY \
 	DOCKER_DIRECTORY COMPOSE_BASE_FILE DEPLOY_STAGE_DEVELOPMENT \
 	DEPLOY_STAGE_LAB DEPLOY_STAGE_QA DEPLOY_STAGE_STAGING \
-	DEPLOY_STAGE_PRODUCTION VERSION_NUMBER_MAX
+	DEPLOY_STAGE_PRODUCTION VERSION_NUMBER_MAX SQL_CLIENT_MISSING_ERROR
 
 # Import the entire common shell script function library
 if ! source "${LIB_DIRECTORY}/shell-helpers.sh"; then
@@ -708,8 +708,13 @@ function getPresentSchemaVersion {
 	if [ $commandExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
 		logDebugToError "${FUNCNAME[0]}:  Failing due to exit code, ${commandExitCode}, and non-matching command output:  [${presentVersion}]."
 
+		# When the query returns an empty result (no matching row), treat it as
+		# if the version doesn't exist yet and initialize to the minimum version
+		if [ -z "$presentVersion" ]; then
+			# No row found for this version key
+			presentVersion="00000001-0"	# One higher than minimum version
 		# ERROR 1049 (42000): Unknown database '${_versionDBName}'
-		if [[ $presentVersion == *"Unknown database '${_versionDBName}'"* ]]; then
+		elif [[ $presentVersion == *"Unknown database '${_versionDBName}'"* ]]; then
 			# The database schema does not exist
 			presentVersion="00000001-0"	# One higher than minimum version
 		# ERROR 1146 (42S02) at line 1: Table '${_versionDBName}.${_schemaSettingsTable}' doesn't exist

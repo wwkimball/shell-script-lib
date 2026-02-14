@@ -60,7 +60,7 @@
 # limitations under the License.
 ################################################################################
 # Constants
-MY_VERSION='2025.05.09-1'
+MY_VERSION='2026.02.13-1'
 MY_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIRECTORY="$(cd "${MY_DIRECTORY}/../../../" && pwd)"
 LIB_DIRECTORY="${STD_SHELL_LIB:-"${PROJECT_DIRECTORY}/lib"}"
@@ -628,7 +628,12 @@ function getPresentSchemaVersion {
 	# zero (0) whenever the settings table does not exist.  If the cause is
 	# anything else, the script will exit with an error.
 	if [ $psqlExitCode -ne 0 ] || [[ ! "$presentVersion" =~ ^[0-9]{8}\-[0-9]+$ ]]; then
-		if [[ $presentVersion =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
+		# When the query returns an empty result (no matching row), treat it as
+		# if the version doesn't exist yet and initialize to the minimum version
+		if [ -z "$presentVersion" ]; then
+			# No row found for this version key
+			presentVersion="00000001-0"	# One higher than minimum version
+		elif [[ $presentVersion =~ "database "\"[[:alnum:]]+\"" does not exist"$ ]]; then
 			# The database schema does not exist
 			presentVersion="00000001-0"	# One higher than minimum version
 		elif [[ $presentVersion == *"relation \"${_schemaSettingsTable}\" does not exist"* ]]; then

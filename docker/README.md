@@ -154,7 +154,7 @@ name: your-stack-name
 
 services:
   your-service-name:
-    image: ${DOCKER_REGISTRY_SOCKET}/${DOCKER_REGISTRY_USER}/your-service-name:${VERSION:-latest}
+    image: ${DOCKER_REGISTRY_SOCKET}/${DOCKER_REGISTRY_REPOSITORY}/your-service-name:${VERSION:-latest}
     container_name: your-service-name
     build:
       context: ../
@@ -242,7 +242,7 @@ this `.env` file (except for `VERSION` which is discussed above).
 
 ```env
 DOCKER_REGISTRY_SOCKET=registry.example.com
-DOCKER_REGISTRY_USER=myuser
+DOCKER_REGISTRY_USERNAME=myuser
 ```
 
 Deployment stage specific, general environment variables can also be defined in

@@ -30,7 +30,7 @@ readonly STD_SHELL_LIB_VERSION
 
 # Reduce directory resolution overhead for all further library calls by caching
 # the base directory of the library as STD_SHELL_LIB, when it isn't already set.
-if [ -z "$STD_SHELL_LIB" ]; then
+if [ -z "${STD_SHELL_LIB:-}" ]; then
 	STD_SHELL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 export STD_SHELL_LIB

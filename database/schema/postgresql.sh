@@ -668,14 +668,14 @@ function setSchemaVersion {
 		return 1
 	fi
 
-	# Set the schema version
+	# Upsert the schema version; INSERT when the key row does not yet exist, UPDATE otherwise
 	local psqlCommandOutput	# Declare locals without assignment to detect errors
 	psqlCommandOutput=$(executePSQL \
 		-v ON_ERROR_STOP=ON \
 		-U "$_databaseUser" \
 		-d "$_versionDBName" \
 		-A -t \
-		-c "UPDATE ${_schemaSettingsTable} SET ${_settingsValueColumn} = '${schemaVersion}' WHERE ${_settingsNameColumn} = '${_schemaVersionKey}';" \
+		-c "INSERT INTO ${_schemaSettingsTable} (${_settingsNameColumn}, ${_settingsValueColumn}) VALUES ('${_schemaVersionKey}', '${schemaVersion}') ON CONFLICT (${_settingsNameColumn}) DO UPDATE SET ${_settingsValueColumn} = EXCLUDED.${_settingsValueColumn};" \
 		2>&1 \
 	)
 	local psqlExitCode=$?
@@ -748,7 +748,7 @@ EOTRANSACTION
 	# The database name to run against is stored in the DDL file as a
 	# comment in the header of the file.  It can be on any line before the
 	# first non-commented line.
-	local databaseName=$(grep -m 1 -E "^--\s*[Dd]atabase:\s*[[:alnum:]_]+$" "$ddlFile" | cut -d: -f2 | tr -d '[:space:]')
+	local databaseName=$(grep -m 1 -E "^--\s*[Dd]atabase:\s*[[:alnum:]_-]+$" "$ddlFile" | cut -d: -f2 | tr -d '[:space:]')
 	if [ -z "$databaseName" ]; then
 		logWarning "Database name header not found in Schema Description File, ${ddlFile}.  Using ${_databaseName}."
 		databaseName=$_databaseName
